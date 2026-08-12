@@ -11,7 +11,7 @@ A production-shaped portfolio project demonstrating safe LLM tool execution for 
 - Deterministic audit logs with latency and outcome
 - Reproducible behavioral evaluation
 
-The default demo uses a deterministic ReplayModel, so it runs without a GPU or API key. ModelAdapter is the integration boundary for the Qwen3 QLoRA adapter.
+The default demo uses a deterministic `ReplayModel`, so it runs without a GPU or API key. `TransformersAdapter` loads the published Qwen3 QLoRA adapter for real inference on suitable hardware.
 
 ## Quick start
 
@@ -21,11 +21,27 @@ python -m order_agent.eval
 python -m unittest discover -s tests -v
 ```
 
-Expected benchmark: **12/12 cases pass**.
+Expected benchmark: 12/12 cases pass.
+
+Run the Gradio demo:
+
+```bash
+pip install -e '.[demo]'
+python app.py
+```
+
+Run with the real model on GPU-capable hardware:
+
+```bash
+pip install -e '.[model,demo]'
+MODEL_MODE=transformers python app.py
+```
+
+The UI always displays its active mode. Mutations remain simulated in both modes.
 
 ## Safety model
 
-Read-only calls execute after schema validation. Mutating calls require explicit user confirmation. Unknown tools, malformed arguments, and instruction-injection attempts are rejected before execution.
+Read-only calls (`get_order`, `track_shipment`, `get_inventory`) execute after schema validation. Mutating calls (`cancel_order`, `create_refund`) require explicit user confirmation. Unknown tools, malformed arguments, and instruction-injection attempts are rejected before execution.
 
 ## Architecture
 
@@ -40,8 +56,11 @@ flowchart TD
     V --> R[Safe rejection]
 ```
 
-## Model
+## Next production integrations
 
-Fine-tuned adapter: [zubairz4far/qwen3-1.7b-tool-calling](https://huggingface.co/zubairz4far/qwen3-1.7b-tool-calling)
+1. Run the real-model benchmark on GPU hardware and publish the measured report.
+2. Replace the in-memory store with read-only Shopify/PostEx adapters behind the same registry.
+3. Persist traces to PostgreSQL and add OpenTelemetry spans.
+4. Run shadow-mode evaluation before enabling any live mutation.
 
 No credentials, customer records, or live commerce operations are included.
