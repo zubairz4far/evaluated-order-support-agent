@@ -21,7 +21,7 @@ python -m order_agent.eval
 python -m unittest discover -s tests -v
 ```
 
-Expected benchmark: 12/12 cases pass.
+Measured on a Kaggle T4 with the published adapter: **12/12 guarded-agent cases passed (100%)** in 31.19 seconds. See [the benchmark report](docs/BENCHMARK.md) and [machine-readable evidence](reports/real_model_benchmark_report.json).
 
 Run the Gradio demo:
 
@@ -47,7 +47,7 @@ The UI always displays its active mode. Mutations remain simulated in both modes
 
 ## Safety model
 
-Read-only calls (`get_order`, `track_shipment`, `get_inventory`) execute after schema validation. Mutating calls (`cancel_order`, `create_refund`) require explicit user confirmation. Unknown tools, malformed arguments, and instruction-injection attempts are rejected before execution.
+The real-model path exposes the trained `get_order` and `check_inventory` tools. Calls execute only after schema validation and identifier grounding against the user's request. The replay path also demonstrates confirmation-gated simulated mutations. Unknown tools, malformed arguments, invented identifiers, and instruction-injection attempts are blocked before execution.
 
 ## Architecture
 
@@ -64,7 +64,7 @@ flowchart TD
 
 ## Next production integrations
 
-1. Run the real-model benchmark on GPU hardware and publish the measured report.
+1. Expand the locked benchmark without reusing cases for training.
 2. Replace the in-memory store with read-only Shopify/PostEx adapters behind the same registry.
 3. Persist traces to PostgreSQL and add OpenTelemetry spans.
 4. Run shadow-mode evaluation before enabling any live mutation.
