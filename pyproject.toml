@@ -1,0 +1,8 @@
+[project]
+name = "evaluated-order-support-agent"
+version = "0.1.0"
+description = "Safe, evaluated tool-calling agent for e-commerce support"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
