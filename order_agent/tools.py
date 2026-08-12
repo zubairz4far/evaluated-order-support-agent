@@ -67,6 +67,7 @@ def build_registry(store: DemoOrderStore) -> dict[str, ToolSpec]:
         "get_order": ToolSpec("get_order", {"order_id": str}, {}, False, store.get_order),
         "track_shipment": ToolSpec("track_shipment", {"tracking_id": str}, {}, False, store.track_shipment),
         "get_inventory": ToolSpec("get_inventory", {"sku": str}, {}, False, store.get_inventory),
+        "check_inventory": ToolSpec("check_inventory", {"sku": str}, {}, False, store.get_inventory),
         "cancel_order": ToolSpec("cancel_order", {"order_id": str}, {}, True, store.cancel_order),
         "create_refund": ToolSpec("create_refund", {"order_id": str, "amount": int}, {}, True, store.create_refund),
     }
