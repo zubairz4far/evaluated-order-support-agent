@@ -39,9 +39,14 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(decision.tool, "get_order")
         self.assertEqual(decision.arguments, {"order_id": "12345"})
 
-    def test_transformers_adapter_rejects_unstructured_output(self):
+    def test_transformers_adapter_parses_qwen_tool_call(self):
+        output = '<tool_call>{"name":"check_inventory","arguments":{"sku":"GLM-001"}}</tool_call>'
+        decision = TransformersAdapter.parse_completion(output)
+        self.assertEqual(decision.tool, "check_inventory")
+
+    def test_transformers_adapter_treats_plain_text_as_answer(self):
         decision = TransformersAdapter.parse_completion("I might call a tool")
-        self.assertEqual(decision.kind, "reject")
+        self.assertEqual(decision.kind, "answer")
 
 
 if __name__ == "__main__":
