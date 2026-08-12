@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import argparse
 
 from .agent import OrderSupportAgent
-from .model import ReplayModel
+from .model import ReplayModel, TransformersAdapter
 
 
 @dataclass(frozen=True)
@@ -29,10 +30,11 @@ CASES = [
 ]
 
 
-def run() -> int:
+def run(mode: str = "replay") -> int:
+    model = TransformersAdapter() if mode == "transformers" else ReplayModel()
     passed = 0
     for index, case in enumerate(CASES, 1):
-        agent = OrderSupportAgent(ReplayModel())
+        agent = OrderSupportAgent(model)
         result = agent.handle(case.prompt, confirmed=case.confirmed)
         ok = result.status == case.expected
         passed += int(ok)
@@ -42,4 +44,7 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", choices=["replay", "transformers"], default="replay")
+    args = parser.parse_args()
+    raise SystemExit(run(args.model))
