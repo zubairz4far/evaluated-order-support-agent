@@ -1,7 +1,7 @@
 import unittest
 
 from order_agent.agent import OrderSupportAgent
-from order_agent.model import ReplayModel
+from order_agent.model import ReplayModel, TransformersAdapter
 from order_agent.tools import DemoOrderStore
 
 
@@ -32,6 +32,16 @@ class AgentTests(unittest.TestCase):
     def test_missing_identifier_clarifies(self):
         result = self.agent.handle("Track my package")
         self.assertEqual(result.status, "clarify")
+
+    def test_transformers_adapter_parses_tool_call(self):
+        output = 'prefix {"kind":"tool_call","tool":"get_order","arguments":{"order_id":"12345"}} suffix'
+        decision = TransformersAdapter.parse_completion(output)
+        self.assertEqual(decision.tool, "get_order")
+        self.assertEqual(decision.arguments, {"order_id": "12345"})
+
+    def test_transformers_adapter_rejects_unstructured_output(self):
+        decision = TransformersAdapter.parse_completion("I might call a tool")
+        self.assertEqual(decision.kind, "reject")
 
 
 if __name__ == "__main__":
