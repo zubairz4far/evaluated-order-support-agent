@@ -37,6 +37,12 @@ pip install -e '.[model,demo]'
 MODEL_MODE=transformers python app.py
 ```
 
+Run the same locked benchmark against the real adapter:
+
+```bash
+python -m order_agent.eval --model transformers
+```
+
 The UI always displays its active mode. Mutations remain simulated in both modes.
 
 ## Safety model
