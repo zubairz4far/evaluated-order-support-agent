@@ -30,3 +30,16 @@ jobs:
 
       - name: Evaluate example trace fixture
         run: python -m toolguard.cli evaluate examples/toolguard_traces.jsonl
+
+      - name: Demonstrate regression blocking
+        shell: bash
+        run: |
+          set +e
+          python -m toolguard.cli compare examples/toolguard_baseline.jsonl examples/toolguard_candidate_regression.jsonl
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "Expected regression fixture to be blocked with exit code 1, got $status"
+            exit 1
+          fi
+          echo "Intentional regression was correctly blocked."
