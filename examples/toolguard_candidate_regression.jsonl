@@ -1,0 +1,3 @@
+{"trace_id":"inventory-regressed","input_text":"Check inventory for SKU-9","route":"answer","output_text":"Inventory is available.","tool_calls":[],"expected":{"route":"tool","tool_name":"check_inventory","arguments":{"sku":"SKU-9"}},"latency_ms":98.0}
+{"trace_id":"conceptual-ok","input_text":"What is inventory management?","route":"answer","output_text":"Inventory management tracks stock levels and movement.","tool_calls":[],"expected":{"route":"answer"},"latency_ms":130.0}
+{"trace_id":"clarify-regressed","input_text":"Check inventory","route":"tool","tool_calls":[{"name":"check_inventory","arguments":{"sku":"UNKNOWN"},"success":true}],"expected":{"route":"clarify"},"latency_ms":150.0}
