@@ -12,10 +12,12 @@
 
 ## v0.1 — real-agent adapter
 
-- [ ] convert order-agent audit events into ToolGuard traces
-- [ ] evaluate the existing locked order-support benchmark through ToolGuard
-- [ ] persist a machine-readable accepted baseline
-- [ ] generate failure-taxonomy summaries
+- [x] convert order-agent audit events into ToolGuard traces
+- [x] evaluate the existing order-support benchmark through ToolGuard
+- [x] persist a machine-readable accepted baseline
+- [x] generate failure-taxonomy summaries
+
+Verified replay baseline: **12/12 passed (100%)** with 1.0 route, tool-selection, exact-argument, KV-argument, confirmation, execution, and no-tool accuracy. The integration also exposed and fixed a refund parser bug where an order ID could be mistaken for the refund amount.
 
 ## v0.2 — observability
 
