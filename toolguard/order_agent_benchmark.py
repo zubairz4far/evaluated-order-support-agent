@@ -9,6 +9,7 @@ from order_agent.agent import OrderSupportAgent
 from order_agent.model import ReplayModel, TransformersAdapter
 
 from .evaluators import evaluate_trace
+from .failure_taxonomy import summarize_failures
 from .models import ExpectedBehavior
 from .order_agent_adapter import audit_event_to_trace
 from .regression import summarize
@@ -128,6 +129,7 @@ def run(mode: str = "replay", json_output: bool = False) -> int:
 
     results = run_cases(model, cases)
     summary = summarize(results)
+    failure_taxonomy = summarize_failures(results)
     failed = [
         {"trace_id": item.trace_id, "failures": item.failures, "score": item.score}
         for item in results
@@ -138,6 +140,7 @@ def run(mode: str = "replay", json_output: bool = False) -> int:
         "mode": mode,
         **summary,
         "passed": int(sum(item.passed for item in results)),
+        "failure_taxonomy": failure_taxonomy,
         "failed": failed,
     }
 
@@ -148,6 +151,8 @@ def run(mode: str = "replay", json_output: bool = False) -> int:
             f"ToolGuard order-agent benchmark: {payload['passed']}/{len(results)} passed "
             f"({summary['pass_rate']:.1%})"
         )
+        if failure_taxonomy:
+            print("Failure taxonomy:", json.dumps(failure_taxonomy, sort_keys=True))
         for item in results:
             label = "PASS" if item.passed else "FAIL"
             detail = "; ".join(item.failures) if item.failures else ""
