@@ -1,0 +1,23 @@
+{
+  "schema_version": "toolguard-baseline-v1",
+  "benchmark": "order-agent-replay",
+  "mode": "replay",
+  "examples": 12,
+  "pass_rate": 1.0,
+  "mean_score": 1.0,
+  "argument_exact_accuracy": 1.0,
+  "argument_kv_accuracy": 1.0,
+  "confirmation_accuracy": 1.0,
+  "execution_success": 1.0,
+  "no_tool_accuracy": 1.0,
+  "route_accuracy": 1.0,
+  "tool_selection_accuracy": 1.0,
+  "passed": 12,
+  "failure_taxonomy": {},
+  "failed": [],
+  "evidence": {
+    "github_actions_run_id": 32393020806,
+    "head_sha": "ad48e5897bc4cdd7313e7bd27ec58963ac749ec5",
+    "verified_at": "2026-08-20T16:37:22Z"
+  }
+}

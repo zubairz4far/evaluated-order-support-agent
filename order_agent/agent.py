@@ -49,10 +49,13 @@ class OrderSupportAgent:
             response = f"Tool call rejected: {exc}."
         self.audit_log.append({
             "trace_id": trace_id,
+            "input_text": message,
+            "output_text": response,
             "decision": decision.kind,
             "tool": decision.tool,
             "arguments": decision.arguments,
             "status": status,
+            "confirmed": confirmed,
             "latency_ms": round((time.perf_counter() - started) * 1000, 3),
         })
         return AgentResult(status=status, message=response, data=data, trace_id=trace_id)

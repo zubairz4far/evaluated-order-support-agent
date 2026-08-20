@@ -31,6 +31,9 @@ jobs:
       - name: Evaluate example trace fixture
         run: python -m toolguard.cli evaluate examples/toolguard_traces.jsonl
 
+      - name: Evaluate real agent pipeline through ToolGuard
+        run: python -m toolguard.order_agent_benchmark --json
+
       - name: Demonstrate regression blocking
         shell: bash
         run: |

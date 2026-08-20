@@ -28,7 +28,7 @@ class ReplayModel:
             return (Decision("tool_call", tool="cancel_order", arguments={"order_id": order_id})
                     if order_id else Decision("clarify", "Please provide the order ID to cancel."))
         if "refund" in lower:
-            amount = self._capture(r"(?:pkr\s*)?(\d{3,6})", lower)
+            amount = self._refund_amount(lower, order_id)
             if not order_id or not amount:
                 return Decision("clarify", "Please provide the order ID and refund amount.")
             return Decision("tool_call", tool="create_refund", arguments={"order_id": order_id, "amount": int(amount)})
@@ -47,6 +47,16 @@ class ReplayModel:
     def _capture(pattern: str, text: str) -> str | None:
         match = re.search(pattern, text)
         return match.group(1) if match else None
+
+    @staticmethod
+    def _refund_amount(text: str, order_id: str | None) -> str | None:
+        explicit = ReplayModel._capture(r"\bpkr\s*(\d{1,6})\b", text)
+        if explicit:
+            return explicit
+        for number in re.findall(r"\b\d{1,6}\b", text):
+            if number != order_id:
+                return number
+        return None
 
 
 TOOL_SCHEMAS = [
