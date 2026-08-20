@@ -1,0 +1,3 @@
+{"trace_id":"inventory-ok","input_text":"Check inventory for SKU-9","route":"tool","tool_calls":[{"name":"check_inventory","arguments":{"sku":"SKU-9"},"success":true}],"expected":{"route":"tool","tool_name":"check_inventory","arguments":{"sku":"SKU-9"}}}
+{"trace_id":"conceptual-ok","input_text":"What is inventory management?","route":"answer","output_text":"Inventory management tracks stock levels and movement.","tool_calls":[],"expected":{"route":"answer"}}
+{"trace_id":"clarify-ok","input_text":"Check inventory","route":"clarify","output_text":"Which SKU should I check?","tool_calls":[],"expected":{"route":"clarify"}}
