@@ -1,0 +1,45 @@
+name: ToolGuard Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [toolguard-core-v0]
+
+permissions:
+  contents: read
+
+jobs:
+  toolguard-regression:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile ToolGuard
+        run: python -m compileall -q toolguard
+
+      - name: Run ToolGuard tests
+        run: python -m unittest discover -s tests -p 'test_toolguard*.py' -v
+
+      - name: Evaluate example trace fixture
+        run: python -m toolguard.cli evaluate examples/toolguard_traces.jsonl
+
+      - name: Demonstrate regression blocking
+        shell: bash
+        run: |
+          set +e
+          python -m toolguard.cli compare examples/toolguard_baseline.jsonl examples/toolguard_candidate_regression.jsonl
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "Expected regression fixture to be blocked with exit code 1, got $status"
+            exit 1
+          fi
+          echo "Intentional regression was correctly blocked."
