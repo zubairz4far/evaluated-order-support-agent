@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from .benchmarks import BenchmarkRegistry, default_benchmark_registry
+from .benchmarks import (
+    BenchmarkCaseSpec,
+    BenchmarkDefinition,
+    BenchmarkRegistry,
+    default_benchmark_registry,
+)
+from .models import ExpectedBehavior
 from .observability import ObservabilityPipeline
 from .policies import ReleasePolicy, check_release
 from .providers import ProviderRegistry, default_provider_registry
@@ -117,6 +123,25 @@ def create_app(
         candidate_trace_ids: list[str]
         policy: PolicyRequest | None = None
 
+    class ExpectedRequest(BaseModel):
+        route: str
+        tool_name: str | None = None
+        arguments: dict[str, Any] = Field(default_factory=dict)
+        require_confirmation: bool = False
+
+    class BenchmarkCaseRequest(BaseModel):
+        case_id: str
+        input_text: str
+        expected: ExpectedRequest
+        metadata: dict[str, str] = Field(default_factory=dict)
+
+    class BenchmarkRequest(BaseModel):
+        name: str
+        description: str = ""
+        version: str = "1"
+        cases: list[BenchmarkCaseRequest]
+        replace: bool = False
+
     app = FastAPI(
         title="ToolGuard API",
         version="0.3.0",
@@ -178,6 +203,28 @@ def create_app(
             for item in benchmark_registry.list()
         ]
         return {"items": items, "count": len(items)}
+
+    @app.post("/api/benchmarks", status_code=201)
+    def register_benchmark(request: BenchmarkRequest) -> dict[str, Any]:
+        try:
+            benchmark = BenchmarkDefinition(
+                name=request.name,
+                description=request.description,
+                version=request.version,
+                cases=tuple(
+                    BenchmarkCaseSpec(
+                        case_id=case.case_id,
+                        input_text=case.input_text,
+                        expected=ExpectedBehavior(**case.expected.model_dump()),
+                        metadata=case.metadata,
+                    )
+                    for case in request.cases
+                ),
+            )
+            benchmark_registry.register(benchmark, replace=request.replace)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"name": benchmark.name, "version": benchmark.version, "size": benchmark.size}
 
     @app.get("/api/benchmarks/{name}")
     def get_benchmark(name: str) -> dict[str, Any]:
@@ -263,7 +310,14 @@ def app_from_environment():
         store.init_schema()
     else:
         store = InMemoryTraceStore()
-    return create_app(store=store)
+
+    policy = ReleasePolicy(
+        name=os.getenv("TOOLGUARD_POLICY_NAME", "strict"),
+        min_pass_rate=float(os.getenv("TOOLGUARD_MIN_PASS_RATE", "1.0")),
+        max_pass_rate_drop=float(os.getenv("TOOLGUARD_MAX_PASS_RATE_DROP", "0.0")),
+        max_metric_drop=float(os.getenv("TOOLGUARD_MAX_METRIC_DROP", "0.0")),
+    )
+    return create_app(store=store, release_policy=policy)
 
 
 app = app_from_environment()
