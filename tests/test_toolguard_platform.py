@@ -73,6 +73,8 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn("ToolGuard", dashboard.text)
         self.assertIn("Recent traces", dashboard.text)
+        self.assertIn("average_latency_ms", dashboard.text)
+        self.assertIn("tool_error_rate", dashboard.text)
 
     def test_default_benchmark_registry_exposes_locked_order_agent_suite(self):
         response = self.client.get("/api/benchmarks/order-agent-replay")
@@ -80,6 +82,35 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["size"], 12)
         self.assertEqual(len(payload["cases"]), 12)
+
+    def test_custom_benchmark_can_be_registered(self):
+        response = self.client.post(
+            "/api/benchmarks",
+            json={
+                "name": "smoke-suite",
+                "description": "one-case API benchmark",
+                "version": "1",
+                "cases": [
+                    {
+                        "case_id": "smoke-01",
+                        "input_text": "Explain what you can do",
+                        "expected": {"route": "answer"},
+                    }
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["size"], 1)
+        fetched = self.client.get("/api/benchmarks/smoke-suite")
+        self.assertEqual(fetched.status_code, 200)
+        self.assertEqual(fetched.json()["cases"][0]["case_id"], "smoke-01")
+
+    def test_provider_registry_exposes_real_agent_replay_adapter(self):
+        response = self.client.get("/api/providers")
+        self.assertEqual(response.status_code, 200)
+        providers = response.json()["items"]
+        self.assertIn("replay-identity", providers)
+        self.assertIn("order-agent-replay", providers)
 
     def test_capture_and_analytics(self):
         self.capture(good_trace("trace-good"))
