@@ -1,7 +1,7 @@
 [project]
 name = "evaluated-order-support-agent"
-version = "0.2.0"
-description = "Safe, evaluated tool-calling agent with ToolGuard reliability and observability"
+version = "0.3.0"
+description = "Safe, evaluated tool-calling agent with ToolGuard reliability, observability, and platform API"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
@@ -13,6 +13,16 @@ observability = [
   "opentelemetry-sdk>=1.28",
   "opentelemetry-exporter-otlp>=1.28",
 ]
+platform = [
+  "fastapi>=0.141,<1",
+  "pydantic>=2.13,<3",
+  "uvicorn>=0.52,<1",
+  "httpx>=0.28,<1",
+]
+
+[tool.setuptools.packages.find]
+include = ["order_agent*", "toolguard*"]
+exclude = ["reports*", "tests*", "docs*", "examples*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

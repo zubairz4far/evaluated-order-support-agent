@@ -29,12 +29,28 @@ Verified replay baseline: **12/12 passed (100%)** with 1.0 route, tool-selection
 - [x] analytics CLI
 - [x] replay regression tests
 
-ToolGuard can now persist traces, export agent/tool spans through an application-configured OpenTelemetry provider, aggregate operational metrics, and replay a stored trace against a candidate runner under the same regression policy used by CI.
+ToolGuard can persist traces, export agent/tool spans through an application-configured OpenTelemetry provider, aggregate operational metrics, and replay a stored trace against a candidate runner under the same regression policy used by CI.
 
 ## v0.3 — platform
 
-- [ ] FastAPI service
-- [ ] benchmark registry
-- [ ] web dashboard
-- [ ] model/provider adapters
-- [ ] CI release policy configuration
+- [x] FastAPI service
+- [x] benchmark registry
+- [x] web dashboard
+- [x] model/provider adapter interface
+- [x] deterministic order-agent replay provider
+- [x] lazy Qwen provider factory
+- [x] configurable release policy API
+- [x] environment-based deployment policy configuration
+- [x] platform API tests and CI smoke coverage
+
+The platform now exposes trace capture/query, analytics, benchmark registration, provider discovery, replay, and release-check endpoints. It runs with the in-memory store by default and switches to PostgreSQL through `TOOLGUARD_DATABASE_URL`.
+
+## Next — production hardening
+
+- [ ] authentication / API keys
+- [ ] migrations instead of startup schema creation
+- [ ] async/background replay workers
+- [ ] persisted benchmark definitions
+- [ ] dashboard filtering and run comparison views
+- [ ] Docker image and deployment manifests
+- [ ] load/concurrency benchmarks
