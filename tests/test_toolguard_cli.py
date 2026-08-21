@@ -29,6 +29,27 @@ class ToolGuardCliTests(unittest.TestCase):
         self.assertEqual(payload["passed"], 3)
         self.assertEqual(payload["pass_rate"], 1.0)
 
+    def test_analytics_reports_usage_fields(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "toolguard.cli",
+                "analytics",
+                str(ROOT / "examples" / "toolguard_traces.jsonl"),
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["traces"], 3)
+        self.assertIn("p95_latency_ms", payload)
+        self.assertIn("total_tokens", payload)
+        self.assertIn("total_cost_usd", payload)
+        self.assertIn("tool_error_rate", payload)
+
     def test_compare_exits_nonzero_on_regression(self):
         good = {
             "trace_id": "base",

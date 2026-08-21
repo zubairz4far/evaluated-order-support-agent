@@ -1,12 +1,18 @@
 [project]
 name = "evaluated-order-support-agent"
-version = "0.1.0"
-description = "Safe, evaluated tool-calling agent for e-commerce support"
+version = "0.2.0"
+description = "Safe, evaluated tool-calling agent with ToolGuard reliability and observability"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
 model = ["transformers>=4.51", "peft>=0.15", "torch>=2.2", "accelerate>=1.2"]
 demo = ["gradio>=5.0"]
+observability = [
+  "psycopg[binary]>=3.2",
+  "opentelemetry-api>=1.28",
+  "opentelemetry-sdk>=1.28",
+  "opentelemetry-exporter-otlp>=1.28",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -4,39 +4,26 @@ import argparse
 import json
 from pathlib import Path
 
-from .models import AgentTrace, ExpectedBehavior, ToolCall
+from .analytics import aggregate_traces
 from .evaluators import evaluate_trace
 from .regression import compare_runs
+from .serialization import trace_from_dict
 
 
-def _load_trace(row):
-    expected = row.get("expected")
-    return AgentTrace(
-        trace_id=row["trace_id"],
-        input_text=row["input_text"],
-        route=row["route"],
-        output_text=row.get("output_text", ""),
-        tool_calls=[ToolCall(**call) for call in row.get("tool_calls", [])],
-        expected=ExpectedBehavior(**expected) if expected else None,
-        confirmation_requested=row.get("confirmation_requested", False),
-        latency_ms=row.get("latency_ms"),
-        input_tokens=row.get("input_tokens"),
-        output_tokens=row.get("output_tokens"),
-        cost_usd=row.get("cost_usd"),
-        metadata=row.get("metadata", {}),
-    )
-
-
-def _load_results(path):
+def _load_traces(path):
     traces = []
     with Path(path).open("r", encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if line:
-                traces.append(evaluate_trace(_load_trace(json.loads(line))))
+                traces.append(trace_from_dict(json.loads(line)))
     if not traces:
         raise SystemExit(f"no traces found in {path}")
     return traces
+
+
+def _load_results(path):
+    return [evaluate_trace(trace) for trace in _load_traces(path)]
 
 
 def main():
@@ -46,6 +33,9 @@ def main():
     evaluate = sub.add_parser("evaluate", help="evaluate a JSONL trace set")
     evaluate.add_argument("traces")
 
+    analytics = sub.add_parser("analytics", help="summarize latency/token/cost telemetry")
+    analytics.add_argument("traces")
+
     compare = sub.add_parser("compare", help="compare candidate traces to baseline")
     compare.add_argument("baseline")
     compare.add_argument("candidate")
@@ -53,6 +43,10 @@ def main():
     compare.add_argument("--max-metric-drop", type=float, default=0.0)
 
     args = parser.parse_args()
+
+    if args.command == "analytics":
+        print(json.dumps(aggregate_traces(_load_traces(args.traces)), indent=2))
+        return
 
     if args.command == "evaluate":
         results = _load_results(args.traces)
