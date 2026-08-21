@@ -21,10 +21,15 @@ Verified replay baseline: **12/12 passed (100%)** with 1.0 route, tool-selection
 
 ## v0.2 — observability
 
-- [ ] OpenTelemetry spans
-- [ ] PostgreSQL trace store
-- [ ] latency/token/cost aggregation
-- [ ] replay IDs and candidate comparison API
+- [x] OpenTelemetry-compatible spans
+- [x] PostgreSQL trace store
+- [x] latency/token/cost aggregation
+- [x] replay IDs and candidate comparison API
+- [x] dependency-free in-memory trace store for CI/tests
+- [x] analytics CLI
+- [x] replay regression tests
+
+ToolGuard can now persist traces, export agent/tool spans through an application-configured OpenTelemetry provider, aggregate operational metrics, and replay a stored trace against a candidate runner under the same regression policy used by CI.
 
 ## v0.3 — platform
 
