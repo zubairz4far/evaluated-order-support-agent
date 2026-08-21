@@ -1,7 +1,14 @@
-from __future__ import annotations
-
 from dataclasses import asdict
 from typing import Any
+
+try:
+    from fastapi import FastAPI, HTTPException, Query
+    from fastapi.responses import HTMLResponse
+    from pydantic import BaseModel, Field
+except ImportError as exc:
+    raise RuntimeError(
+        "ToolGuard platform requires: pip install -e '.[platform]'"
+    ) from exc
 
 from .benchmarks import (
     BenchmarkCaseSpec,
@@ -15,6 +22,54 @@ from .policies import ReleasePolicy, check_release
 from .providers import ProviderRegistry, default_provider_registry
 from .serialization import trace_from_dict, trace_to_dict
 from .store import InMemoryTraceStore, TraceStore
+
+
+class TraceRequest(BaseModel):
+    trace: dict[str, Any]
+    replay_id: str | None = None
+
+
+class ReplayRequest(BaseModel):
+    source_trace_id: str
+    provider: str
+    candidate_label: str | None = None
+    max_pass_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_metric_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class PolicyRequest(BaseModel):
+    name: str = "api-policy"
+    min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_pass_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_metric_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ReleaseCheckRequest(BaseModel):
+    baseline_trace_ids: list[str]
+    candidate_trace_ids: list[str]
+    policy: PolicyRequest | None = None
+
+
+class ExpectedRequest(BaseModel):
+    route: str
+    tool_name: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    require_confirmation: bool = False
+
+
+class BenchmarkCaseRequest(BaseModel):
+    case_id: str
+    input_text: str
+    expected: ExpectedRequest
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class BenchmarkRequest(BaseModel):
+    name: str
+    description: str = ""
+    version: str = "1"
+    cases: list[BenchmarkCaseRequest]
+    replace: bool = False
 
 
 DASHBOARD_HTML = """<!doctype html>
@@ -86,61 +141,11 @@ def create_app(
     benchmarks: BenchmarkRegistry | None = None,
     release_policy: ReleasePolicy | None = None,
 ):
-    try:
-        from fastapi import FastAPI, HTTPException, Query
-        from fastapi.responses import HTMLResponse
-        from pydantic import BaseModel, Field
-    except ImportError as exc:
-        raise RuntimeError(
-            "ToolGuard platform requires: pip install -e '.[platform]'"
-        ) from exc
-
     trace_store = store or InMemoryTraceStore()
     pipeline = ObservabilityPipeline(trace_store)
     provider_registry = providers or default_provider_registry()
     benchmark_registry = benchmarks or default_benchmark_registry()
     default_policy = release_policy or ReleasePolicy()
-
-    class TraceRequest(BaseModel):
-        trace: dict[str, Any]
-        replay_id: str | None = None
-
-    class ReplayRequest(BaseModel):
-        source_trace_id: str
-        provider: str
-        candidate_label: str | None = None
-        max_pass_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
-        max_metric_drop: float = Field(default=0.0, ge=0.0, le=1.0)
-
-    class PolicyRequest(BaseModel):
-        name: str = "api-policy"
-        min_pass_rate: float = Field(default=1.0, ge=0.0, le=1.0)
-        max_pass_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
-        max_metric_drop: float = Field(default=0.0, ge=0.0, le=1.0)
-
-    class ReleaseCheckRequest(BaseModel):
-        baseline_trace_ids: list[str]
-        candidate_trace_ids: list[str]
-        policy: PolicyRequest | None = None
-
-    class ExpectedRequest(BaseModel):
-        route: str
-        tool_name: str | None = None
-        arguments: dict[str, Any] = Field(default_factory=dict)
-        require_confirmation: bool = False
-
-    class BenchmarkCaseRequest(BaseModel):
-        case_id: str
-        input_text: str
-        expected: ExpectedRequest
-        metadata: dict[str, str] = Field(default_factory=dict)
-
-    class BenchmarkRequest(BaseModel):
-        name: str
-        description: str = ""
-        version: str = "1"
-        cases: list[BenchmarkCaseRequest]
-        replace: bool = False
 
     app = FastAPI(
         title="ToolGuard API",
