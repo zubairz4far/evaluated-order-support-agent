@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [toolguard-core-v0]
+    branches: [toolguard-core-v0, toolguard-platform-v03]
 
 permissions:
   contents: read
@@ -22,6 +22,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install ToolGuard platform dependencies
+        run: python -m pip install -e '.[platform]'
+
       - name: Compile ToolGuard
         run: python -m compileall -q toolguard
 
@@ -33,6 +36,9 @@ jobs:
 
       - name: Summarize observability telemetry
         run: python -m toolguard.cli analytics examples/toolguard_traces.jsonl
+
+      - name: Smoke test platform app
+        run: python -c "from toolguard.platform import app; print(app.title, app.version)"
 
       - name: Evaluate real agent pipeline through ToolGuard
         run: python -m toolguard.order_agent_benchmark --json
