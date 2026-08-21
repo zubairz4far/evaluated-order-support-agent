@@ -20,5 +20,9 @@ platform = [
   "httpx>=0.28,<1",
 ]
 
+[tool.setuptools.packages.find]
+include = ["order_agent*", "toolguard*"]
+exclude = ["reports*", "tests*", "docs*", "examples*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
