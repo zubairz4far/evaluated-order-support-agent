@@ -2,7 +2,7 @@
 
 A production-shaped portfolio project demonstrating safe LLM tool execution for e-commerce support. The agent validates every proposed call, applies policy checks, executes only allow-listed tools, records an audit trace, and is evaluated against a locked behavioral benchmark.
 
-The repository also contains **ToolGuard**, a provider-agnostic reliability and observability layer for scoring agent traces, blocking regressions, persisting runs, exporting telemetry, and replaying failures against candidate systems.
+The repository also contains **ToolGuard**, a provider-agnostic reliability platform for evaluating agent traces, blocking regressions, persisting runs, exporting telemetry, replaying failures, and enforcing release policies through an API.
 
 ## What this demonstrates
 
@@ -17,9 +17,14 @@ The repository also contains **ToolGuard**, a provider-agnostic reliability and 
 - PostgreSQL-ready trace persistence
 - OpenTelemetry-compatible agent/tool spans
 - Latency, token, cost, and tool-error analytics
-- Trace replay with candidate comparison
+- Stored-trace replay with candidate comparison
+- FastAPI service + OpenAPI contract
+- Versioned benchmark registry
+- Configurable release policies
+- Lightweight operational dashboard
+- Model/provider adapter interface
 
-The default demo uses a deterministic `ReplayModel`, so it runs without a GPU or API key. `TransformersAdapter` loads the published Qwen3 QLoRA adapter for real inference on suitable hardware.
+The default agent demo uses a deterministic `ReplayModel`, so it runs without a GPU or API key. `TransformersAdapter` loads the published Qwen3 QLoRA adapter for real inference on suitable hardware.
 
 ## Quick start
 
@@ -31,7 +36,7 @@ python -m unittest discover -s tests -v
 
 Measured on a Kaggle T4 with the published adapter: **12/12 guarded-agent cases passed (100%)** in 31.19 seconds. See [the benchmark report](docs/BENCHMARK.md) and [machine-readable evidence](reports/real_model_benchmark_report.json).
 
-## ToolGuard reliability + observability
+## ToolGuard CLI
 
 ToolGuard evaluates behavior at the trace level instead of judging only the final answer. It scores routing, tool selection, argument correctness, no-tool behavior, confirmation gates, and execution, while retaining operational diagnostics.
 
@@ -43,19 +48,32 @@ python -m toolguard.cli compare examples/toolguard_baseline.jsonl examples/toolg
 
 The compare command exits non-zero when a candidate exceeds the configured regression budget, so it can act as a release gate in GitHub Actions.
 
-### v0.2 observability
+## ToolGuard v0.3 platform
 
-`ObservabilityPipeline` can persist traces, emit OpenTelemetry spans, aggregate operational metrics, and replay a stored trace against a candidate runner under the same regression policy.
-
-Production observability dependencies are optional:
+Install and run the API locally:
 
 ```bash
-pip install -e '.[observability]'
+pip install -e '.[platform]'
+uvicorn toolguard.platform:app --host 0.0.0.0 --port 8000
 ```
 
-The PostgreSQL backend stores complete traces as JSONB and indexes common operational fields. The OpenTelemetry sink uses the application's configured provider, so OTLP or another exporter can be attached without coupling ToolGuard to one vendor.
+Then open:
 
-See [ToolGuard architecture and usage](docs/TOOLGUARD.md), [v0.2 observability](docs/TOOLGUARD_OBSERVABILITY.md), and the [implementation roadmap](TOOLGUARD_ROADMAP.md).
+- `/dashboard` for the built-in operational dashboard
+- `/docs` for FastAPI/OpenAPI documentation
+- `/api/analytics` for trace-level operational metrics
+- `/api/benchmarks` for the benchmark registry
+- `/api/providers` for replay providers
+
+The platform uses an in-memory store by default. PostgreSQL is enabled by setting `TOOLGUARD_DATABASE_URL` and installing the `observability` extra.
+
+Release thresholds can be configured with `TOOLGUARD_MIN_PASS_RATE`, `TOOLGUARD_MAX_PASS_RATE_DROP`, and `TOOLGUARD_MAX_METRIC_DROP`, or supplied per API request.
+
+The default provider registry includes a deterministic identity replay and the existing guarded order-agent replay. A lazy `qwen_order_agent_provider()` factory wraps the published Transformers/PEFT path without loading the model at API startup.
+
+See [ToolGuard architecture and usage](docs/TOOLGUARD.md), [v0.2 observability](docs/TOOLGUARD_OBSERVABILITY.md), [v0.3 platform](docs/PLATFORM.md), and the [implementation roadmap](TOOLGUARD_ROADMAP.md).
+
+## Existing agent demo
 
 Run the Gradio demo:
 
@@ -98,17 +116,21 @@ flowchart TD
     G --> E[Deterministic evaluators]
     E --> Q[Regression gate]
     G --> O[Observability pipeline]
-    O --> DB[(PostgreSQL)]
+    O --> DB[(PostgreSQL / In-memory)]
     O --> OT[OpenTelemetry]
-    DB --> RP[Replay + analytics]
+    DB --> API[FastAPI platform]
+    API --> BR[Benchmark registry]
+    API --> RP[Replay providers]
+    API --> REL[Release policies]
+    API --> UI[Dashboard]
 ```
 
-## Next production integrations
+## Next production hardening
 
-1. Add a FastAPI service over trace ingestion, analytics, replay, and comparisons.
-2. Add a benchmark registry and versioned release policies.
-3. Add a web dashboard for trace/failure exploration.
-4. Add additional model/provider adapters.
-5. Run shadow-mode evaluation before enabling any live mutation.
+1. Add authentication/API keys.
+2. Replace startup schema creation with migrations.
+3. Add asynchronous replay workers for expensive model runs.
+4. Persist benchmark definitions and release-policy history.
+5. Add Docker/deployment manifests and load testing.
 
 No credentials, customer records, or live commerce operations are included.
