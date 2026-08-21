@@ -118,11 +118,11 @@ async function load() {
   ]);
   const metrics = [
     ['Traces', analytics.traces],
-    ['Avg latency ms', analytics.avg_latency_ms],
+    ['Avg latency ms', analytics.average_latency_ms],
     ['P95 latency ms', analytics.p95_latency_ms],
     ['Tokens', analytics.total_tokens],
     ['Cost USD', analytics.total_cost_usd],
-    ['Tool errors', analytics.tool_errors]
+    ['Tool error rate', analytics.tool_error_rate]
   ];
   document.getElementById('metrics').innerHTML = metrics.map(([k,v]) => `<div class="card"><div class="muted">${k}</div><div class="metric">${fmt(v)}</div></div>`).join('');
   document.getElementById('traces').innerHTML = traces.items.map(t => `<tr><td><code>${t.trace_id}</code></td><td>${t.route}</td><td>${fmt(t.latency_ms)}</td><td>${fmt(t.cost_usd)}</td></tr>`).join('');
