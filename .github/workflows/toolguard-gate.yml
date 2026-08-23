@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [toolguard-core-v0, toolguard-platform-v03]
+    branches: [toolguard-core-v0, toolguard-platform-v03, feat/toolguard-v0.4-hardening]
 
 permissions:
   contents: read
@@ -55,3 +55,35 @@ jobs:
             exit 1
           fi
           echo "Intentional regression was correctly blocked."
+
+      - name: Validate Compose configuration
+        env:
+          TOOLGUARD_API_KEY: ci-secret
+        run: docker compose config -q
+
+      - name: Build hardened container
+        run: docker build -t toolguard:ci .
+
+      - name: Smoke test container and API authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name toolguard-ci -e TOOLGUARD_API_KEY=ci-secret -p 8000:8000 toolguard:ci
+          trap 'docker logs toolguard-ci || true; docker rm -f toolguard-ci || true' EXIT
+
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health >/tmp/health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          grep -q '"version":"0.4.0"' /tmp/health.json
+
+          status=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' http://127.0.0.1:8000/api/providers)
+          test "$status" = "401"
+
+          curl -fsS -H 'X-API-Key: ci-secret' http://127.0.0.1:8000/api/providers >/tmp/providers.json
+          grep -q 'order-agent-replay' /tmp/providers.json

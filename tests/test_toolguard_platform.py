@@ -11,6 +11,10 @@ HAS_PLATFORM = (
 )
 
 
+API_KEY = "test-toolguard-key"
+AUTH_HEADERS = {"X-API-Key": API_KEY}
+
+
 def good_trace(trace_id: str) -> AgentTrace:
     return AgentTrace(
         trace_id=trace_id,
@@ -57,17 +61,22 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from toolguard.platform import create_app
 
-        self.client = TestClient(create_app())
+        self.client = TestClient(create_app(api_key=API_KEY))
 
     def capture(self, trace: AgentTrace):
-        response = self.client.post("/api/traces", json={"trace": trace_to_dict(trace)})
+        response = self.client.post(
+            "/api/traces",
+            json={"trace": trace_to_dict(trace)},
+            headers=AUTH_HEADERS,
+        )
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
     def test_health_and_dashboard(self):
         health = self.client.get("/health")
         self.assertEqual(health.status_code, 200)
-        self.assertEqual(health.json()["version"], "0.3.0")
+        self.assertEqual(health.json()["version"], "0.4.0")
+        self.assertTrue(health.json()["api_auth_configured"])
 
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 200)
@@ -75,9 +84,33 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertIn("Recent traces", dashboard.text)
         self.assertIn("average_latency_ms", dashboard.text)
         self.assertIn("tool_error_rate", dashboard.text)
+        self.assertIn("X-API-Key", dashboard.text)
+
+    def test_api_rejects_missing_and_wrong_key(self):
+        missing = self.client.get("/api/providers")
+        self.assertEqual(missing.status_code, 401)
+
+        wrong = self.client.get(
+            "/api/providers",
+            headers={"X-API-Key": "wrong-key"},
+        )
+        self.assertEqual(wrong.status_code, 401)
+
+    def test_api_fails_closed_without_server_key(self):
+        from fastapi.testclient import TestClient
+        from toolguard.platform import create_app
+
+        client = TestClient(create_app())
+        self.assertEqual(client.get("/health").status_code, 200)
+        response = client.get("/api/providers")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("not configured", response.json()["detail"])
 
     def test_default_benchmark_registry_exposes_locked_order_agent_suite(self):
-        response = self.client.get("/api/benchmarks/order-agent-replay")
+        response = self.client.get(
+            "/api/benchmarks/order-agent-replay",
+            headers=AUTH_HEADERS,
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["size"], 12)
@@ -86,6 +119,7 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
     def test_custom_benchmark_can_be_registered(self):
         response = self.client.post(
             "/api/benchmarks",
+            headers=AUTH_HEADERS,
             json={
                 "name": "smoke-suite",
                 "description": "one-case API benchmark",
@@ -101,12 +135,15 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["size"], 1)
-        fetched = self.client.get("/api/benchmarks/smoke-suite")
+        fetched = self.client.get(
+            "/api/benchmarks/smoke-suite",
+            headers=AUTH_HEADERS,
+        )
         self.assertEqual(fetched.status_code, 200)
         self.assertEqual(fetched.json()["cases"][0]["case_id"], "smoke-01")
 
     def test_provider_registry_exposes_real_agent_replay_adapter(self):
-        response = self.client.get("/api/providers")
+        response = self.client.get("/api/providers", headers=AUTH_HEADERS)
         self.assertEqual(response.status_code, 200)
         providers = response.json()["items"]
         self.assertIn("replay-identity", providers)
@@ -114,7 +151,7 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
 
     def test_capture_and_analytics(self):
         self.capture(good_trace("trace-good"))
-        response = self.client.get("/api/analytics")
+        response = self.client.get("/api/analytics", headers=AUTH_HEADERS)
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["traces"], 1)
@@ -125,6 +162,7 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.capture(good_trace("trace-source"))
         response = self.client.post(
             "/api/replays",
+            headers=AUTH_HEADERS,
             json={
                 "source_trace_id": "trace-source",
                 "provider": "replay-identity",
@@ -142,6 +180,7 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.capture(bad_trace("candidate"))
         response = self.client.post(
             "/api/releases/check",
+            headers=AUTH_HEADERS,
             json={
                 "baseline_trace_ids": ["baseline"],
                 "candidate_trace_ids": ["candidate"],
