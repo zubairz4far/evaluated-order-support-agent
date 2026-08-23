@@ -17,3 +17,59 @@ jobs:
           python-version: "3.11"
       - run: python -m unittest discover -s tests -v
       - run: python -m order_agent.eval
+
+  real-qwen100:
+    if: >-
+      (github.event_name == 'pull_request' && github.head_ref == 'benchmark/qwen-v1-real-cpu') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/benchmark/qwen-v1-real-cpu')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      HF_HOME: ${{ runner.temp }}/hf-cache
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU inference dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.10.0
+          python -m pip install \
+            "transformers==5.14.0" \
+            "peft==0.19.1" \
+            "accelerate>=1.2,<2"
+          python -m pip install -e . --no-deps
+      - name: Run locked 100-case benchmark against real Qwen adapter
+        run: |
+          python scripts/run_real_qwen_benchmark.py \
+            --output reports/real_qwen_agent_reliability_v1.json \
+            --min-pass-rate 0.90
+      - name: Show evidence summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('reports/real_qwen_agent_reliability_v1.json').read_text())
+          print('benchmark:', p['benchmark'])
+          print('provider:', p['provider'])
+          print('passed_cases:', p['passed_cases'])
+          print('failed_cases:', p['failed_cases'])
+          print('unexpected_tool_calls:', p['unexpected_tool_calls'])
+          print('release_gate:', p['release_gate'])
+          print('categories:', json.dumps(p['categories'], indent=2, sort_keys=True))
+          print('runtime:', p['runtime'])
+          PY
+      - name: Upload real-model evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-qwen-agent-reliability-v1
+          path: reports/real_qwen_agent_reliability_v1.json
+          if-no-files-found: error
+          retention-days: 30
