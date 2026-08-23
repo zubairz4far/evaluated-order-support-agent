@@ -77,6 +77,7 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json()["version"], "1.0.0")
         self.assertTrue(health.json()["api_auth_configured"])
+        self.assertFalse(health.json()["demo_mode"])
 
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 200)
@@ -84,6 +85,29 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertIn("Run 100-case benchmark", dashboard.text)
         self.assertIn("Recent traces", dashboard.text)
         self.assertIn("X-API-Key", dashboard.text)
+
+    def test_public_demo_exposes_only_safe_contract_benchmark(self):
+        from fastapi.testclient import TestClient
+        from toolguard.platform import create_app
+
+        client = TestClient(create_app(demo_mode=True))
+        health = client.get("/health")
+        self.assertTrue(health.json()["demo_mode"])
+        self.assertFalse(health.json()["api_auth_configured"])
+
+        demo = client.get("/demo/benchmark")
+        self.assertEqual(demo.status_code, 200, demo.text)
+        payload = demo.json()
+        self.assertEqual(payload["provider"], "qwen-contract-replay")
+        self.assertEqual(payload["passed_cases"], 100)
+        self.assertEqual(payload["release_gate"]["decision"], "PASS")
+
+        protected = client.get("/api/providers")
+        self.assertEqual(protected.status_code, 503)
+
+    def test_demo_endpoint_is_disabled_in_authenticated_mode(self):
+        response = self.client.get("/demo/benchmark")
+        self.assertEqual(response.status_code, 404)
 
     def test_api_rejects_missing_and_wrong_key(self):
         missing = self.client.get("/api/providers")
