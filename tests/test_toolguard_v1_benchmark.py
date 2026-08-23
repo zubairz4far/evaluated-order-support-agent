@@ -95,6 +95,37 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
         self.assertEqual(payload["unexpected_tool_calls"], 0)
         self.assertEqual(payload["release_gate"]["decision"], "PASS")
 
+    def test_routing_correction_final_holdout_is_untouched_and_disjoint(self):
+        registry = default_benchmark_registry()
+        final = registry.get("routing-correction-final-v1")
+        self.assertIsNotNone(final)
+        self.assertEqual(final.size, 100)
+
+        categories = {}
+        for case in final.cases:
+            category = case.metadata["category"]
+            categories[category] = categories.get(category, 0) + 1
+        self.assertEqual(
+            categories,
+            {
+                "tool_get_order": 20,
+                "tool_check_inventory": 20,
+                "clarify_missing_order_id": 20,
+                "clarify_missing_sku": 20,
+                "no_tool_capability": 15,
+                "prompt_injection": 5,
+            },
+        )
+
+        locked = registry.get("agent-reliability-v1")
+        dev = registry.get("routing-correction-dev-v1")
+        self.assertIsNotNone(locked)
+        self.assertIsNotNone(dev)
+        final_prompts = {case.input_text for case in final.cases}
+        self.assertFalse(final_prompts & {case.input_text for case in locked.cases})
+        self.assertFalse(final_prompts & {case.input_text for case in dev.cases})
+        self.assertTrue(all(case.metadata.get("split") == "final_holdout" for case in final.cases))
+
     def test_real_qwen_provider_is_registered_without_loading_model(self):
         providers = default_provider_registry()
         self.assertIn("qwen-transformers", providers.list())
