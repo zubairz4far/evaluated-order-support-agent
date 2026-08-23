@@ -105,17 +105,18 @@ DASHBOARD_HTML = """<!doctype html>
     select, button { background: #171b21; color: #f3f4f6; border: 1px solid #343b45; border-radius: 8px; padding: 9px 12px; }
     button { cursor: pointer; font-weight: 700; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #090b0e; padding: 14px; border-radius: 10px; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
 <main>
   <h1>ToolGuard v1.0</h1>
   <p class="muted">Agent reliability, replay, locked evaluation and release gates.</p>
-  <p class="muted">API data is protected. The dashboard asks for the shared API key and keeps it only in session storage.</p>
+  <p class="muted" id="mode-note"></p>
 
   <div class="section card">
     <h2>Run locked agent reliability benchmark</h2>
-    <p class="muted">The default provider is the deterministic Qwen-contract twin. Choose <code>qwen-transformers</code> only on a GPU deployment with model dependencies installed.</p>
+    <p class="muted">100 cases: tool routing, exact arguments, missing-argument clarification, no-tool behavior and prompt-injection rejection.</p>
     <div class="controls">
       <select id="provider"></select>
       <button id="run-benchmark">Run 100-case benchmark</button>
@@ -123,30 +124,45 @@ DASHBOARD_HTML = """<!doctype html>
     <pre id="benchmark-result">No benchmark run yet.</pre>
   </div>
 
-  <div class="grid" id="metrics"></div>
-  <div class="section card">
-    <h2>Recent traces</h2>
-    <table><thead><tr><th>Trace</th><th>Route</th><th>Latency</th><th>Cost</th></tr></thead><tbody id="traces"></tbody></table>
-  </div>
-  <div class="section card">
-    <h2>Benchmarks</h2>
-    <table><thead><tr><th>Name</th><th>Version</th><th>Cases</th><th>SHA-256</th></tr></thead><tbody id="benchmarks"></tbody></table>
+  <div id="private-data">
+    <div class="grid" id="metrics"></div>
+    <div class="section card">
+      <h2>Recent traces</h2>
+      <table><thead><tr><th>Trace</th><th>Route</th><th>Latency</th><th>Cost</th></tr></thead><tbody id="traces"></tbody></table>
+    </div>
+    <div class="section card">
+      <h2>Benchmarks</h2>
+      <table><thead><tr><th>Name</th><th>Version</th><th>Cases</th><th>SHA-256</th></tr></thead><tbody id="benchmarks"></tbody></table>
+    </div>
   </div>
 </main>
 <script>
 const fmt = v => v === null || v === undefined ? '—' : v;
-let apiKey = sessionStorage.getItem('toolguard_api_key');
-if (!apiKey) {
-  apiKey = window.prompt('ToolGuard API key');
-  if (apiKey) sessionStorage.setItem('toolguard_api_key', apiKey);
-}
-const headers = () => apiKey ? {'X-API-Key': apiKey} : {};
+let apiKey = null;
+let demoMode = false;
+const authHeaders = () => apiKey ? {'X-API-Key': apiKey} : {};
 const api = async (path, options={}) => {
-  const response = await fetch(path, {...options, headers: {...headers(), ...(options.headers || {})}});
+  const response = await fetch(path, {...options, headers: {...authHeaders(), ...(options.headers || {})}});
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
   return response.json();
 };
 async function load() {
+  const health = await fetch('/health').then(r => r.json());
+  demoMode = Boolean(health.demo_mode);
+  const select = document.getElementById('provider');
+  if (demoMode) {
+    document.getElementById('mode-note').textContent = 'Public demo mode: only the deterministic locked benchmark is exposed. Protected /api routes remain fail-closed.';
+    document.getElementById('private-data').classList.add('hidden');
+    select.innerHTML = '<option value="qwen-contract-replay" selected>qwen-contract-replay</option>';
+    return;
+  }
+
+  document.getElementById('mode-note').textContent = 'Authenticated mode: API data and provider execution require X-API-Key.';
+  apiKey = sessionStorage.getItem('toolguard_api_key');
+  if (!apiKey) {
+    apiKey = window.prompt('ToolGuard API key');
+    if (apiKey) sessionStorage.setItem('toolguard_api_key', apiKey);
+  }
   const [analytics, traces, benchmarks, providers] = await Promise.all([
     api('/api/analytics'),
     api('/api/traces?limit=20'),
@@ -164,18 +180,19 @@ async function load() {
   document.getElementById('metrics').innerHTML = metrics.map(([k,v]) => `<div class="card"><div class="muted">${k}</div><div class="metric">${fmt(v)}</div></div>`).join('');
   document.getElementById('traces').innerHTML = traces.items.map(t => `<tr><td><code>${t.trace_id}</code></td><td>${t.route}</td><td>${fmt(t.latency_ms)}</td><td>${fmt(t.cost_usd)}</td></tr>`).join('');
   document.getElementById('benchmarks').innerHTML = benchmarks.items.map(b => `<tr><td>${b.name}</td><td>${b.version}</td><td>${b.size}</td><td><code>${b.sha256.slice(0,12)}…</code></td></tr>`).join('');
-  const select = document.getElementById('provider');
   select.innerHTML = providers.items.map(p => `<option value="${p}" ${p === 'qwen-contract-replay' ? 'selected' : ''}>${p}</option>`).join('');
 }
 document.getElementById('run-benchmark').addEventListener('click', async () => {
   const output = document.getElementById('benchmark-result');
   output.textContent = 'Running…';
   try {
-    const payload = await api('/api/benchmarks/agent-reliability-v1/run', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({provider: document.getElementById('provider').value})
-    });
+    const payload = demoMode
+      ? await fetch('/demo/benchmark').then(async r => { if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`); return r.json(); })
+      : await api('/api/benchmarks/agent-reliability-v1/run', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({provider: document.getElementById('provider').value})
+        });
     output.textContent = JSON.stringify({
       provider: payload.provider,
       benchmark: payload.benchmark,
@@ -202,6 +219,7 @@ def create_app(
     benchmarks: BenchmarkRegistry | None = None,
     release_policy: ReleasePolicy | None = None,
     api_key: str | None = None,
+    demo_mode: bool = False,
 ):
     trace_store = store or InMemoryTraceStore()
     pipeline = ObservabilityPipeline(trace_store)
@@ -221,6 +239,7 @@ def create_app(
     app.state.benchmarks = benchmark_registry
     app.state.release_policy = default_policy
     app.state.api_key_configured = bool(api_key)
+    app.state.demo_mode = demo_mode
 
     @app.get("/health")
     def health() -> dict[str, str | bool]:
@@ -229,12 +248,28 @@ def create_app(
             "service": "toolguard",
             "version": "1.0.0",
             "api_auth_configured": bool(api_key),
+            "demo_mode": demo_mode,
         }
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard() -> str:
         return DASHBOARD_HTML
+
+    @app.get("/demo/benchmark")
+    def public_demo_benchmark() -> dict[str, Any]:
+        if not demo_mode:
+            raise HTTPException(status_code=404, detail="demo mode is disabled")
+        benchmark = benchmark_registry.get("agent-reliability-v1")
+        provider = provider_registry.get("qwen-contract-replay")
+        if benchmark is None or provider is None:
+            raise HTTPException(status_code=503, detail="demo benchmark is unavailable")
+        return run_benchmark(
+            benchmark,
+            provider,
+            min_pass_rate=1.0,
+            require_zero_unexpected_tools=True,
+        )
 
     @app.get("/api/traces")
     def list_traces(limit: int = Query(default=100, ge=1, le=5000)) -> dict[str, Any]:
@@ -420,10 +455,12 @@ def app_from_environment():
         max_pass_rate_drop=float(os.getenv("TOOLGUARD_MAX_PASS_RATE_DROP", "0.0")),
         max_metric_drop=float(os.getenv("TOOLGUARD_MAX_METRIC_DROP", "0.0")),
     )
+    demo_mode = os.getenv("TOOLGUARD_DEMO_MODE", "false").lower() in {"1", "true", "yes"}
     return create_app(
         store=store,
         release_policy=policy,
         api_key=os.getenv("TOOLGUARD_API_KEY"),
+        demo_mode=demo_mode,
     )
 
 
