@@ -1,5 +1,7 @@
+import re
 import unittest
 
+from order_agent.types import Decision
 from toolguard.benchmark_runner import run_benchmark
 from toolguard.benchmarks import (
     AGENT_RELIABILITY_V1_SHA256,
@@ -7,7 +9,25 @@ from toolguard.benchmarks import (
     build_agent_reliability_v1_benchmark,
     default_benchmark_registry,
 )
-from toolguard.providers import default_provider_registry
+from toolguard.providers import default_provider_registry, order_agent_provider
+
+
+class RoutingAdversaryModel:
+    """Test double that is correct only when an explicit identifier is grounded.
+
+    Any ambiguous request that reaches this model becomes an invented tool call,
+    forcing the pre-model routing policy to prove that it intercepted clarify
+    and capability cases itself.
+    """
+
+    def decide(self, message):
+        order = re.search(r"\b(\d{5})\b", message)
+        sku = re.search(r"\b(GLM-\d+)\b", message, re.IGNORECASE)
+        if order:
+            return Decision("tool_call", tool="get_order", arguments={"order_id": order.group(1)})
+        if sku:
+            return Decision("tool_call", tool="check_inventory", arguments={"sku": sku.group(1).upper()})
+        return Decision("tool_call", tool="check_inventory", arguments={"sku": "GLM-999"})
 
 
 class ToolGuardV1BenchmarkTests(unittest.TestCase):
@@ -65,13 +85,12 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
         locked_prompts = {case.input_text for case in build_agent_reliability_v1_benchmark().cases}
         self.assertFalse(locked_prompts & {case.input_text for case in benchmark.cases})
 
-    def test_routing_correction_candidate_passes_development_suite(self):
+    def test_routing_correction_policy_passes_development_suite_against_adversary(self):
         benchmark = default_benchmark_registry().get("routing-correction-dev-v1")
-        provider = default_provider_registry().get("qwen-contract-replay")
+        provider = order_agent_provider("routing-adversary", RoutingAdversaryModel)
         self.assertIsNotNone(benchmark)
-        self.assertIsNotNone(provider)
         payload = run_benchmark(benchmark, provider, min_pass_rate=1.0)
-        self.assertEqual(payload["passed_cases"], 70)
+        self.assertEqual(payload["passed_cases"], 70, payload["failures"])
         self.assertEqual(payload["failed_cases"], 0)
         self.assertEqual(payload["unexpected_tool_calls"], 0)
         self.assertEqual(payload["release_gate"]["decision"], "PASS")
