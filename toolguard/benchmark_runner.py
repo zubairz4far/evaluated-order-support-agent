@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 import uuid
 
@@ -69,8 +68,6 @@ def run_benchmark(
             metadata={**case.metadata, "benchmark_case_id": case.case_id},
         )
         candidate = provider.run(source, run_id)
-        # Provider-generated trace ids are operationally useful, but benchmark
-        # summaries must retain stable locked case ids for category accounting.
         candidate = AgentTrace(
             trace_id=case.case_id,
             input_text=candidate.input_text,
