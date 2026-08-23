@@ -19,9 +19,6 @@ jobs:
       - run: python -m order_agent.eval
 
   real-qwen100:
-    if: >-
-      (github.event_name == 'pull_request' && github.head_ref == 'benchmark/qwen-v1-real-cpu') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/benchmark/qwen-v1-real-cpu')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
