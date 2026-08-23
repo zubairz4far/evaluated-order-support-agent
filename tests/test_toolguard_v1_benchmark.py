@@ -65,6 +65,17 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
         locked_prompts = {case.input_text for case in build_agent_reliability_v1_benchmark().cases}
         self.assertFalse(locked_prompts & {case.input_text for case in benchmark.cases})
 
+    def test_routing_correction_candidate_passes_development_suite(self):
+        benchmark = default_benchmark_registry().get("routing-correction-dev-v1")
+        provider = default_provider_registry().get("qwen-contract-replay")
+        self.assertIsNotNone(benchmark)
+        self.assertIsNotNone(provider)
+        payload = run_benchmark(benchmark, provider, min_pass_rate=1.0)
+        self.assertEqual(payload["passed_cases"], 70)
+        self.assertEqual(payload["failed_cases"], 0)
+        self.assertEqual(payload["unexpected_tool_calls"], 0)
+        self.assertEqual(payload["release_gate"]["decision"], "PASS")
+
     def test_real_qwen_provider_is_registered_without_loading_model(self):
         providers = default_provider_registry()
         self.assertIn("qwen-transformers", providers.list())
