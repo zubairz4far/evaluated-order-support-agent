@@ -139,6 +139,14 @@ class OrderSupportAgent:
         ):
             return Decision("clarify", "Please provide the SKU.")
 
+        item_availability_request = (
+            ("item" in lower or "product" in lower)
+            and "available" in lower
+            and any(marker in lower for marker in ("tell me", "whether", "find out", "is the", "check"))
+        )
+        if item_availability_request:
+            return Decision("clarify", "Please provide the SKU.")
+
         return None
 
     @staticmethod
