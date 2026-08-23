@@ -10,10 +10,12 @@ except ImportError as exc:
         "ToolGuard platform requires: pip install -e '.[platform]'"
     ) from exc
 
+from .benchmark_runner import run_benchmark
 from .benchmarks import (
     BenchmarkCaseSpec,
     BenchmarkDefinition,
     BenchmarkRegistry,
+    benchmark_sha256,
     default_benchmark_registry,
 )
 from .models import ExpectedBehavior
@@ -36,6 +38,12 @@ class ReplayRequest(BaseModel):
     candidate_label: str | None = None
     max_pass_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
     max_metric_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class BenchmarkRunRequest(BaseModel):
+    provider: str = "qwen-contract-replay"
+    min_pass_rate: float = Field(default=0.90, ge=0.0, le=1.0)
+    require_zero_unexpected_tools: bool = True
 
 
 class PolicyRequest(BaseModel):
@@ -93,13 +101,28 @@ DASHBOARD_HTML = """<!doctype html>
     th { color: #9ca3af; font-weight: 500; }
     code { color: #c7d2fe; }
     .section { margin-top: 28px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    select, button { background: #171b21; color: #f3f4f6; border: 1px solid #343b45; border-radius: 8px; padding: 9px 12px; }
+    button { cursor: pointer; font-weight: 700; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #090b0e; padding: 14px; border-radius: 10px; }
   </style>
 </head>
 <body>
 <main>
-  <h1>ToolGuard</h1>
-  <p class="muted">Agent reliability, observability, replay and release gates.</p>
+  <h1>ToolGuard v1.0</h1>
+  <p class="muted">Agent reliability, replay, locked evaluation and release gates.</p>
   <p class="muted">API data is protected. The dashboard asks for the shared API key and keeps it only in session storage.</p>
+
+  <div class="section card">
+    <h2>Run locked agent reliability benchmark</h2>
+    <p class="muted">The default provider is the deterministic Qwen-contract twin. Choose <code>qwen-transformers</code> only on a GPU deployment with model dependencies installed.</p>
+    <div class="controls">
+      <select id="provider"></select>
+      <button id="run-benchmark">Run 100-case benchmark</button>
+    </div>
+    <pre id="benchmark-result">No benchmark run yet.</pre>
+  </div>
+
   <div class="grid" id="metrics"></div>
   <div class="section card">
     <h2>Recent traces</h2>
@@ -107,27 +130,28 @@ DASHBOARD_HTML = """<!doctype html>
   </div>
   <div class="section card">
     <h2>Benchmarks</h2>
-    <table><thead><tr><th>Name</th><th>Version</th><th>Cases</th></tr></thead><tbody id="benchmarks"></tbody></table>
+    <table><thead><tr><th>Name</th><th>Version</th><th>Cases</th><th>SHA-256</th></tr></thead><tbody id="benchmarks"></tbody></table>
   </div>
 </main>
 <script>
 const fmt = v => v === null || v === undefined ? '—' : v;
+let apiKey = sessionStorage.getItem('toolguard_api_key');
+if (!apiKey) {
+  apiKey = window.prompt('ToolGuard API key');
+  if (apiKey) sessionStorage.setItem('toolguard_api_key', apiKey);
+}
+const headers = () => apiKey ? {'X-API-Key': apiKey} : {};
+const api = async (path, options={}) => {
+  const response = await fetch(path, {...options, headers: {...headers(), ...(options.headers || {})}});
+  if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+  return response.json();
+};
 async function load() {
-  let apiKey = sessionStorage.getItem('toolguard_api_key');
-  if (!apiKey) {
-    apiKey = window.prompt('ToolGuard API key');
-    if (apiKey) sessionStorage.setItem('toolguard_api_key', apiKey);
-  }
-  const headers = apiKey ? {'X-API-Key': apiKey} : {};
-  const api = async path => {
-    const response = await fetch(path, {headers});
-    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
-    return response.json();
-  };
-  const [analytics, traces, benchmarks] = await Promise.all([
+  const [analytics, traces, benchmarks, providers] = await Promise.all([
     api('/api/analytics'),
     api('/api/traces?limit=20'),
-    api('/api/benchmarks')
+    api('/api/benchmarks'),
+    api('/api/providers')
   ]);
   const metrics = [
     ['Traces', analytics.traces],
@@ -139,8 +163,32 @@ async function load() {
   ];
   document.getElementById('metrics').innerHTML = metrics.map(([k,v]) => `<div class="card"><div class="muted">${k}</div><div class="metric">${fmt(v)}</div></div>`).join('');
   document.getElementById('traces').innerHTML = traces.items.map(t => `<tr><td><code>${t.trace_id}</code></td><td>${t.route}</td><td>${fmt(t.latency_ms)}</td><td>${fmt(t.cost_usd)}</td></tr>`).join('');
-  document.getElementById('benchmarks').innerHTML = benchmarks.items.map(b => `<tr><td>${b.name}</td><td>${b.version}</td><td>${b.size}</td></tr>`).join('');
+  document.getElementById('benchmarks').innerHTML = benchmarks.items.map(b => `<tr><td>${b.name}</td><td>${b.version}</td><td>${b.size}</td><td><code>${b.sha256.slice(0,12)}…</code></td></tr>`).join('');
+  const select = document.getElementById('provider');
+  select.innerHTML = providers.items.map(p => `<option value="${p}" ${p === 'qwen-contract-replay' ? 'selected' : ''}>${p}</option>`).join('');
 }
+document.getElementById('run-benchmark').addEventListener('click', async () => {
+  const output = document.getElementById('benchmark-result');
+  output.textContent = 'Running…';
+  try {
+    const payload = await api('/api/benchmarks/agent-reliability-v1/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({provider: document.getElementById('provider').value})
+    });
+    output.textContent = JSON.stringify({
+      provider: payload.provider,
+      benchmark: payload.benchmark,
+      passed_cases: payload.passed_cases,
+      failed_cases: payload.failed_cases,
+      unexpected_tool_calls: payload.unexpected_tool_calls,
+      release_gate: payload.release_gate,
+      categories: payload.categories
+    }, null, 2);
+  } catch (err) {
+    output.textContent = String(err);
+  }
+});
 load().catch(err => { document.body.insertAdjacentHTML('beforeend', `<pre>${err}</pre>`); });
 </script>
 </body>
@@ -163,8 +211,8 @@ def create_app(
 
     app = FastAPI(
         title="ToolGuard API",
-        version="0.4.0",
-        description="Agent reliability, observability, replay and release-gate service.",
+        version="1.0.0",
+        description="Agent reliability, observability, locked evaluation, replay and release-gate service.",
     )
     app.add_middleware(ApiKeyMiddleware, api_key=api_key)
     app.state.store = trace_store
@@ -179,7 +227,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "toolguard",
-            "version": "0.4.0",
+            "version": "1.0.0",
             "api_auth_configured": bool(api_key),
         }
 
@@ -225,6 +273,7 @@ def create_app(
                 "description": item.description,
                 "version": item.version,
                 "size": item.size,
+                "sha256": benchmark_sha256(item),
             }
             for item in benchmark_registry.list()
         ]
@@ -250,7 +299,12 @@ def create_app(
             benchmark_registry.register(benchmark, replace=request.replace)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return {"name": benchmark.name, "version": benchmark.version, "size": benchmark.size}
+        return {
+            "name": benchmark.name,
+            "version": benchmark.version,
+            "size": benchmark.size,
+            "sha256": benchmark_sha256(benchmark),
+        }
 
     @app.get("/api/benchmarks/{name}")
     def get_benchmark(name: str) -> dict[str, Any]:
@@ -262,6 +316,7 @@ def create_app(
             "description": benchmark.description,
             "version": benchmark.version,
             "size": benchmark.size,
+            "sha256": benchmark_sha256(benchmark),
             "cases": [
                 {
                     "case_id": case.case_id,
@@ -272,6 +327,26 @@ def create_app(
                 for case in benchmark.cases
             ],
         }
+
+    @app.post("/api/benchmarks/{name}/run")
+    def execute_benchmark(name: str, request: BenchmarkRunRequest) -> dict[str, Any]:
+        benchmark = benchmark_registry.get(name)
+        if benchmark is None:
+            raise HTTPException(status_code=404, detail="benchmark not found")
+        provider = provider_registry.get(request.provider)
+        if provider is None:
+            raise HTTPException(status_code=404, detail="provider not found")
+        try:
+            return run_benchmark(
+                benchmark,
+                provider,
+                min_pass_rate=request.min_pass_rate,
+                require_zero_unexpected_tools=request.require_zero_unexpected_tools,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/replays")
     def replay(request: ReplayRequest) -> dict[str, Any]:
@@ -288,6 +363,8 @@ def create_app(
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return asdict(outcome)
