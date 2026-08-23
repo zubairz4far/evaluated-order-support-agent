@@ -9,6 +9,7 @@ from toolguard.benchmarks import (
     build_agent_reliability_v1_benchmark,
     default_benchmark_registry,
 )
+from toolguard.final_holdout import build_routing_correction_final_v1_benchmark
 from toolguard.providers import default_provider_registry, order_agent_provider
 
 
@@ -97,8 +98,7 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
 
     def test_routing_correction_final_holdout_is_untouched_and_disjoint(self):
         registry = default_benchmark_registry()
-        final = registry.get("routing-correction-final-v1")
-        self.assertIsNotNone(final)
+        final = build_routing_correction_final_v1_benchmark()
         self.assertEqual(final.size, 100)
 
         categories = {}
@@ -125,6 +125,7 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
         self.assertFalse(final_prompts & {case.input_text for case in locked.cases})
         self.assertFalse(final_prompts & {case.input_text for case in dev.cases})
         self.assertTrue(all(case.metadata.get("split") == "final_holdout" for case in final.cases))
+        print("ROUTING_FINAL_V1_SHA256", benchmark_sha256(final))
 
     def test_real_qwen_provider_is_registered_without_loading_model(self):
         providers = default_provider_registry()
