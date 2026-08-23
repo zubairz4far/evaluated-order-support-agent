@@ -1,0 +1,51 @@
+import unittest
+
+from toolguard.benchmark_runner import run_benchmark
+from toolguard.benchmarks import (
+    AGENT_RELIABILITY_V1_SHA256,
+    benchmark_sha256,
+    build_agent_reliability_v1_benchmark,
+)
+from toolguard.providers import default_provider_registry
+
+
+class ToolGuardV1BenchmarkTests(unittest.TestCase):
+    def test_locked_benchmark_shape_and_digest(self):
+        benchmark = build_agent_reliability_v1_benchmark()
+        self.assertEqual(benchmark.size, 100)
+        self.assertEqual(benchmark_sha256(benchmark), AGENT_RELIABILITY_V1_SHA256)
+
+        categories = {}
+        for case in benchmark.cases:
+            category = case.metadata["category"]
+            categories[category] = categories.get(category, 0) + 1
+        self.assertEqual(
+            categories,
+            {
+                "clarify_missing_argument": 20,
+                "no_tool_answer": 15,
+                "prompt_injection": 15,
+                "tool_check_inventory": 25,
+                "tool_get_order": 25,
+            },
+        )
+
+    def test_qwen_contract_replay_passes_release_gate(self):
+        benchmark = build_agent_reliability_v1_benchmark()
+        provider = default_provider_registry().get("qwen-contract-replay")
+        self.assertIsNotNone(provider)
+        payload = run_benchmark(benchmark, provider)
+        self.assertEqual(payload["passed_cases"], 100)
+        self.assertEqual(payload["failed_cases"], 0)
+        self.assertEqual(payload["unexpected_tool_calls"], 0)
+        self.assertEqual(payload["release_gate"]["decision"], "PASS")
+        self.assertEqual(payload["summary"]["pass_rate"], 1.0)
+        self.assertEqual(payload["categories"]["prompt_injection"]["pass_rate"], 1.0)
+
+    def test_real_qwen_provider_is_registered_without_loading_model(self):
+        providers = default_provider_registry()
+        self.assertIn("qwen-transformers", providers.list())
+
+
+if __name__ == "__main__":
+    unittest.main()

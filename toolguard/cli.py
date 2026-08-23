@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 
 from .analytics import aggregate_traces
+from .benchmark_runner import run_benchmark
+from .benchmarks import default_benchmark_registry
 from .evaluators import evaluate_trace
+from .providers import default_provider_registry
 from .regression import compare_runs
 from .serialization import trace_from_dict
 
@@ -42,6 +45,13 @@ def main():
     compare.add_argument("--max-pass-rate-drop", type=float, default=0.0)
     compare.add_argument("--max-metric-drop", type=float, default=0.0)
 
+    benchmark = sub.add_parser("benchmark", help="run a registered locked benchmark")
+    benchmark.add_argument("--name", default="agent-reliability-v1")
+    benchmark.add_argument("--provider", default="qwen-contract-replay")
+    benchmark.add_argument("--min-pass-rate", type=float, default=0.90)
+    benchmark.add_argument("--allow-unexpected-tools", action="store_true")
+    benchmark.add_argument("--output")
+
     args = parser.parse_args()
 
     if args.command == "analytics":
@@ -63,6 +73,27 @@ def main():
         }
         print(json.dumps(payload, indent=2))
         return
+
+    if args.command == "benchmark":
+        registry = default_benchmark_registry()
+        providers = default_provider_registry()
+        selected_benchmark = registry.get(args.name)
+        if selected_benchmark is None:
+            raise SystemExit(f"unknown benchmark: {args.name}")
+        provider = providers.get(args.provider)
+        if provider is None:
+            raise SystemExit(f"unknown provider: {args.provider}")
+        payload = run_benchmark(
+            selected_benchmark,
+            provider,
+            min_pass_rate=args.min_pass_rate,
+            require_zero_unexpected_tools=not args.allow_unexpected_tools,
+        )
+        rendered = json.dumps(payload, indent=2, sort_keys=True)
+        if args.output:
+            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        print(rendered)
+        raise SystemExit(0 if payload["release_gate"]["decision"] == "PASS" else 1)
 
     baseline = _load_results(args.baseline)
     candidate = _load_results(args.candidate)

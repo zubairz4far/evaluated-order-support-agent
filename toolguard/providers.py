@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from threading import Lock
 from typing import Callable, Protocol
 import uuid
 
@@ -56,9 +57,14 @@ def replay_identity_provider() -> CallableProvider:
 def order_agent_provider(name: str, model_factory: Callable[[], object]) -> CallableProvider:
     """Adapt an OrderSupportAgent model to the generic ToolGuard provider API.
 
-    Passing `TransformersAdapter` as the factory exposes the published Qwen
-    model without importing or loading heavy ML dependencies at platform start.
+    The model is created lazily on the first replay and cached for subsequent
+    requests. Provider execution is serialized because transformer generation
+    is not assumed to be thread-safe. This keeps the published Qwen adapter out
+    of API startup while avoiding a 1.7B-model reload for every benchmark case.
     """
+
+    state: dict[str, object] = {}
+    lock = Lock()
 
     def runner(source: AgentTrace, replay_id: str) -> AgentTrace:
         if source.expected is None:
@@ -68,8 +74,12 @@ def order_agent_provider(name: str, model_factory: Callable[[], object]) -> Call
         from .order_agent_adapter import audit_event_to_trace
 
         confirmed = bool(source.metadata.get("confirmed", False))
-        agent = OrderSupportAgent(model_factory())
-        agent.handle(source.input_text, confirmed=confirmed)
+        with lock:
+            if "model" not in state:
+                state["model"] = model_factory()
+            agent = OrderSupportAgent(state["model"])
+            agent.handle(source.input_text, confirmed=confirmed)
+
         trace = audit_event_to_trace(agent.audit_log[-1], source.expected)
         return replace(
             trace,
@@ -89,6 +99,12 @@ def replay_order_agent_provider() -> CallableProvider:
     return order_agent_provider("order-agent-replay", ReplayModel)
 
 
+def qwen_contract_replay_provider() -> CallableProvider:
+    from order_agent.model import QwenContractReplayModel
+
+    return order_agent_provider("qwen-contract-replay", QwenContractReplayModel)
+
+
 def qwen_order_agent_provider() -> CallableProvider:
     from order_agent.model import TransformersAdapter
 
@@ -99,4 +115,6 @@ def default_provider_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register(replay_identity_provider())
     registry.register(replay_order_agent_provider())
+    registry.register(qwen_contract_replay_provider())
+    registry.register(qwen_order_agent_provider())
     return registry

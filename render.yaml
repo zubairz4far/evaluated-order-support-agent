@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: toolguard-agent-reliability
+    runtime: docker
+    plan: free
+    autoDeploy: false
+    healthCheckPath: /health
+    envVars:
+      - key: TOOLGUARD_DEMO_MODE
+        value: "true"
+      - key: TOOLGUARD_MIN_PASS_RATE
+        value: "1.0"

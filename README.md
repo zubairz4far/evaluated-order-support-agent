@@ -1,72 +1,140 @@
 # Evaluated Order Support Agent + ToolGuard
 
-A production-shaped portfolio project for safe LLM tool execution and **agent reliability engineering**. The guarded order-support agent validates proposed calls, applies policy checks, executes only allow-listed tools, records an audit trace, and is evaluated against locked behavioral benchmarks. ToolGuard evaluates those traces, replays failures, blocks regressions, exposes observability, and enforces release policies through a secured platform API.
+A production-shaped project for safe LLM tool execution and **agent reliability engineering**. The guarded agent validates proposed calls before execution; ToolGuard evaluates traces, replays failures, blocks regressions, exposes operational diagnostics, and runs locked behavioral benchmarks through provider adapters.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/zubairz4far/evaluated-order-support-agent)
 
 ## Status
 
-**ToolGuard v0.4 — secured and container-validated platform hardening.**
+**ToolGuard v1.0 — locked agent-reliability benchmark + Qwen provider integration + safe public demo path.**
 
-v0.4 keeps the evaluated v0.3 platform and adds:
+v1.0 adds:
 
-- fail-closed API-key protection for every `/api/*` route;
-- explicit `401` behavior for missing/wrong credentials and `503` when server auth is not configured;
-- non-root Python 3.12 container runtime;
-- Docker Compose with PostgreSQL-backed trace persistence;
-- Kubernetes deployment with Secret-backed configuration, probes, resources, and non-root security context;
-- CI container build plus live health/authentication smoke testing.
+- a **100-case locked reliability benchmark** compatible with the published Qwen tool schema;
+- SHA-256 benchmark integrity verification;
+- cached/lazy `qwen-transformers` provider integration;
+- deterministic `qwen-contract-replay` CI provider using the same two tool names;
+- one-click benchmark execution from the dashboard;
+- benchmark execution API + CLI;
+- category-level metrics, failure details and `PASS` / `BLOCK` release decisions;
+- safe public demo mode that exposes only the deterministic benchmark while `/api/*` remains fail-closed;
+- Render Blueprint support in addition to Docker, Compose and Kubernetes;
+- live-container CI that validates authentication and the 100-case benchmark API.
 
-Full v0.4 boundary and limitations: [docs/PLATFORM_V04.md](docs/PLATFORM_V04.md).
+## The locked 100-case benchmark
 
-## What this demonstrates
+`agent-reliability-v1` is deliberately aligned to the real model adapter rather than a fictional larger tool catalog.
 
-- Typed tool schemas and strict argument validation
-- Separation between model decisions and real-world execution
-- Confirmation gates for destructive actions
-- Prompt-injection and unknown-tool rejection
-- Deterministic audit logs with latency and outcome
-- Reproducible behavioral evaluation
-- Provider-agnostic agent trace evaluation
-- Candidate-vs-baseline regression gates for CI
-- PostgreSQL-backed trace persistence
-- OpenTelemetry-compatible agent/tool spans
-- Latency, token, cost, and tool-error analytics
-- Stored-trace replay with candidate comparison
-- FastAPI service + OpenAPI contract
-- Versioned benchmark registry
-- Configurable release policies
-- Lightweight operational dashboard
-- Model/provider adapter interface
-- API-key security boundary
-- Docker / Compose / Kubernetes deployment artifacts
-- Live container/auth smoke verification in CI
+| Category | Cases | Expected behavior |
+|---|---:|---|
+| Valid order requests | 25 | exact `get_order` call + order ID |
+| Valid inventory requests | 25 | exact `check_inventory` call + SKU |
+| Missing required arguments | 20 | clarify without a tool call |
+| Conceptual / no-tool requests | 15 | answer without a tool call |
+| Prompt-injection / invented-tool requests | 15 | reject without a tool call |
+| **Total** | **100** | locked behavior contract |
 
-The default agent demo uses a deterministic `ReplayModel`, so it runs without a GPU or paid API key. `TransformersAdapter` loads the published Qwen3 QLoRA adapter for real inference on suitable hardware.
+Frozen benchmark SHA-256:
 
-## Evaluated guarded-agent result
-
-Measured on a Kaggle T4 with the published adapter: **12/12 guarded-agent cases passed (100%)** in 31.19 seconds.
-
-See [docs/BENCHMARK.md](docs/BENCHMARK.md) and [reports/real_model_benchmark_report.json](reports/real_model_benchmark_report.json).
-
-This 12-case result validates the guarded-agent benchmark only; it is not presented as broad model accuracy.
-
-## ToolGuard CLI
-
-ToolGuard evaluates behavior at the trace level instead of judging only the final answer. It scores routing, tool selection, argument correctness, no-tool behavior, confirmation gates, and execution while retaining operational diagnostics.
-
-```bash
-python -m toolguard.cli evaluate examples/toolguard_traces.jsonl
-python -m toolguard.cli analytics examples/toolguard_traces.jsonl
-python -m toolguard.cli compare \
-  examples/toolguard_baseline.jsonl \
-  examples/toolguard_candidate_regression.jsonl
+```text
+d005de66762008999db1a37469231fc5ae0554dad16f0336827265db35dafaa9
 ```
 
-The compare command exits non-zero when a candidate exceeds the configured regression budget, allowing it to act as a release gate in CI.
+The runtime refuses to treat a changed `agent-reliability-v1` definition as the locked suite if its digest no longer matches this value.
 
-## Run ToolGuard v0.4 locally
+## Evidence: deterministic contract vs real Qwen
 
-Install the platform extra:
+Two evidence types are intentionally kept separate.
+
+### 1. Deterministic Qwen-contract release gate
+
+`qwen-contract-replay` mirrors the published adapter's `get_order` / `check_inventory` contract and is used for reproducible CI, container and API acceptance. It is **not presented as model accuracy**.
+
+Run it with:
+
+```bash
+python -m toolguard.cli benchmark \
+  --name agent-reliability-v1 \
+  --provider qwen-contract-replay
+```
+
+The release gate requires the configured pass-rate threshold and, by default, zero unexpected tool calls on non-tool cases.
+
+### 2. Real published Qwen adapter
+
+`qwen-transformers` wraps:
+
+- base: `Qwen/Qwen3-1.7B`
+- adapter: `zubairz4far/qwen3-1.7b-tool-calling`
+
+The provider is registered at platform startup **without loading the model**. On first use it loads once, caches the model, and serializes provider execution rather than reloading 1.7B parameters for every case.
+
+Run the 100-case suite on suitable GPU hardware:
+
+```bash
+pip install -e '.[platform,model]'
+export TOOLGUARD_API_KEY='local-secret'
+uvicorn toolguard.platform:app --host 0.0.0.0 --port 8000
+
+python -m toolguard.cli benchmark \
+  --name agent-reliability-v1 \
+  --provider qwen-transformers
+```
+
+No 100-case real-Qwen score is claimed until that GPU benchmark is actually executed and frozen.
+
+The earlier guarded-agent benchmark **was** measured on a Kaggle T4 with the published adapter: **12/12 cases passed (100%)** in 31.19 seconds. See [`docs/BENCHMARK.md`](docs/BENCHMARK.md) and [`reports/real_model_benchmark_report.json`](reports/real_model_benchmark_report.json). That result applies only to its 12-case suite.
+
+## One-click evaluation API
+
+Protected execution endpoint:
+
+```text
+POST /api/benchmarks/{name}/run
+```
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/benchmarks/agent-reliability-v1/run \
+  -H 'X-API-Key: local-secret' \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"qwen-contract-replay"}'
+```
+
+The result contains:
+
+- benchmark name/version/SHA;
+- provider;
+- overall pass rate and evaluator metrics;
+- category-level pass rates;
+- failed-case details;
+- unexpected-tool count;
+- release-gate decision and reasons.
+
+## Public portfolio demo mode
+
+The checked-in `render.yaml` launches a deliberately constrained demo:
+
+```text
+TOOLGUARD_DEMO_MODE=true
+```
+
+In demo mode:
+
+- `/` and `/dashboard` are public;
+- `GET /demo/benchmark` runs only `agent-reliability-v1` through `qwen-contract-replay`;
+- the UI does not ask visitors for an API key;
+- `/api/*` remains fail-closed because no server API key is configured;
+- no real Qwen weights are downloaded;
+- no live commerce mutation is exposed;
+- no persistent trace database is claimed.
+
+This is analogous to an executable portfolio fixture, not a claim that the free demo host is the full GPU production topology.
+
+## Authenticated platform
+
+For the full API boundary:
 
 ```bash
 pip install -e '.[platform]'
@@ -79,44 +147,33 @@ Public endpoints:
 - `GET /health`
 - `GET /`
 - `GET /dashboard`
+- `GET /demo/benchmark` only when demo mode is enabled
 
-Protected endpoints require `X-API-Key`:
+Protected `/api/*` endpoints include:
 
-- `GET /api/traces`
-- `POST /api/traces`
-- `GET /api/analytics`
-- `GET /api/providers`
-- `GET /api/benchmarks`
-- `POST /api/benchmarks`
-- `POST /api/replays`
-- `POST /api/releases/check`
+- traces + analytics;
+- provider registry;
+- benchmark registry;
+- benchmark execution;
+- stored-trace replay;
+- candidate-vs-baseline release checks.
 
-Example:
+Missing/wrong credentials return `401` when a server key is configured. If the server key is absent, protected routes return `503` rather than becoming public.
 
-```bash
-curl -H 'X-API-Key: local-secret' http://localhost:8000/api/providers
-```
+## Docker / Compose
 
-If `TOOLGUARD_API_KEY` is absent, protected routes fail closed with HTTP `503` rather than becoming public.
-
-## Docker Compose
-
-Compose adds PostgreSQL-backed trace persistence and refuses to resolve the ToolGuard service without an API key.
+The image runs as an unprivileged user and supports platform-assigned `$PORT` values.
 
 ```bash
 export TOOLGUARD_API_KEY='replace-with-a-secret'
 docker compose up --build
 ```
 
-Then open:
-
-- `http://localhost:8000/dashboard`
-- `http://localhost:8000/docs`
-- `http://localhost:8000/health`
+Compose adds PostgreSQL-backed **trace** persistence. Benchmark definitions and some release configuration remain process-local in v1.0.
 
 ## Kubernetes
 
-The checked-in manifest is intentionally conservative: one ToolGuard replica, `Recreate` strategy, non-root runtime, health probes, resource bounds, and Secret-backed API key/database configuration.
+The checked-in manifest remains intentionally conservative: one ToolGuard replica, `Recreate` strategy, non-root runtime, probes, resources, and Secret-backed API/database configuration.
 
 ```bash
 kubectl create secret generic toolguard-secrets \
@@ -126,87 +183,74 @@ kubectl create secret generic toolguard-secrets \
 kubectl apply -f k8s/deployment.yaml
 ```
 
-The manifest uses an example/local image name; it is **not** a claim that a public container registry image has been published.
-
-## Existing agent demo
-
-Run the deterministic Gradio demo:
-
-```bash
-pip install -e '.[demo]'
-python app.py
-```
-
-Run with the real model on GPU-capable hardware:
-
-```bash
-pip install -e '.[model,demo]'
-MODEL_MODE=transformers python app.py
-```
-
-Run the same locked benchmark against the real adapter:
-
-```bash
-python -m order_agent.eval --model transformers
-```
-
-The UI always displays its active mode. Mutations remain simulated in both modes.
-
-## Safety model
-
-The real-model path exposes the trained `get_order` and `check_inventory` tools. Calls execute only after schema validation and identifier grounding against the user's request. The replay path also demonstrates confirmation-gated simulated mutations. Unknown tools, malformed arguments, invented identifiers, and instruction-injection attempts are blocked before execution.
-
-ToolGuard v0.4 separately protects its platform API with a shared API key. That is a basic service boundary, not enterprise identity; production deployments should normally add TLS, workload identity/OIDC, RBAC, secret rotation, and network policy.
+The manifest uses an example/local image name; it is **not** a claim that a registry image has been published.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    U[User request] --> M[Model adapter]
-    M --> V[Schema validation]
+    U[User request] --> M[Model/provider adapter]
+    M --> V[Schema + grounding validation]
     V --> P[Policy gate]
     P --> T[Allow-listed tool]
-    T --> A[Audit event]
-    P --> C[Confirmation request]
-    V --> R[Safe rejection]
+    T --> A[Audit trace]
+    V --> R[Clarify / reject]
     A --> G[ToolGuard trace]
     G --> E[Deterministic evaluators]
-    E --> Q[Regression gate]
-    G --> O[Observability pipeline]
-    O --> DB[(PostgreSQL / In-memory)]
-    O --> OT[OpenTelemetry]
-    DB --> API[FastAPI platform]
-    API --> AUTH[X-API-Key boundary]
-    AUTH --> BR[Benchmark registry]
-    AUTH --> RP[Replay providers]
-    AUTH --> REL[Release policies]
-    AUTH --> UI[Dashboard]
+    E --> REL[PASS / BLOCK release gate]
+    G --> O[Latency / token / cost diagnostics]
+    O --> DB[(PostgreSQL / in-memory)]
+    DB --> API[Secured FastAPI platform]
+    API --> B[Locked benchmark registry]
+    B --> C[Qwen contract replay]
+    B --> Q[Lazy cached Qwen3 adapter]
+    API --> UI[Dashboard]
+    DEMO[Public demo mode] --> C
 ```
+
+## What this demonstrates
+
+- LLM tool-schema design and guarded execution
+- Qwen3 QLoRA integration
+- provider abstraction and model lifecycle handling
+- exact routing / tool / argument evaluation
+- prompt-injection and unexpected-tool checks
+- locked benchmark integrity
+- replay and regression gates
+- explicit candidate release policy
+- PostgreSQL trace persistence
+- OpenTelemetry-compatible observability
+- FastAPI + OpenAPI
+- API-key security boundary
+- Docker / Compose / Kubernetes / Render deployment artifacts
+- live container validation in GitHub Actions
 
 ## CI acceptance
 
-The ToolGuard Gate validates the behavior rather than only linting source files:
+The ToolGuard Gate now validates:
 
-- ToolGuard platform tests;
-- deterministic trace fixture evaluation;
-- observability analytics;
-- guarded order-agent replay benchmark;
-- intentional regression blocking;
-- Docker Compose configuration;
-- Docker image build;
-- live container `/health`;
-- unauthenticated protected API returns `401`;
-- authenticated protected API succeeds.
+1. platform/unit tests;
+2. deterministic trace evaluation and analytics;
+3. original guarded-agent replay benchmark;
+4. **locked 100-case Qwen-contract benchmark + SHA**;
+5. intentional candidate regression blocking;
+6. Docker Compose configuration;
+7. non-root container build;
+8. live `/health` and version check;
+9. unauthorized protected API -> `401`;
+10. Qwen provider registration;
+11. live-container execution of the 100-case benchmark API.
 
 ## Remaining production gaps
 
-v0.4 deliberately does **not** claim a finished multi-tenant or horizontally scalable reliability service. Remaining work includes:
+v1.0 still does **not** claim a multi-tenant or horizontally scalable hosted SaaS. Remaining gaps include:
 
-1. replace startup PostgreSQL schema creation with versioned migrations;
-2. persist benchmark definitions and release-policy history;
-3. move expensive real-model replays onto workers/queues;
-4. add distributed idempotency/concurrency controls before horizontal scaling;
-5. run sustained load/soak tests;
-6. replace the shared key with production identity/RBAC where needed.
+- queue/worker execution for expensive real-model benchmark runs;
+- versioned database migrations instead of startup schema creation;
+- persistence of benchmark definitions and release-policy history;
+- distributed concurrency/idempotency before horizontal scaling;
+- sustained load/soak testing;
+- OIDC/workload identity and RBAC for enterprise deployments;
+- a frozen 100-case real-Qwen GPU result.
 
-No credentials, customer records, live commerce mutations, production traffic, or production SLO claims are included.
+No credentials, customer records, live commerce mutations, production traffic or production SLO claims are included.
