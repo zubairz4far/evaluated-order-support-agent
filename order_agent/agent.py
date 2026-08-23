@@ -64,10 +64,10 @@ class OrderSupportAgent:
     def _pre_model_routing_policy(message: str) -> Decision | None:
         """Apply narrow deterministic routing rules before model inference.
 
-        This policy exists to enforce two reliability invariants discovered by
-        evaluation: do not ask the model to invent identifiers for transactional
-        lookups, and do not route general capability questions into tools.
-        Requests with grounded order IDs or SKUs still flow to the model.
+        The policy enforces two reliability invariants discovered by evaluation:
+        transactional lookups need grounded identifiers, while capability
+        questions must remain no-tool answers. Identifier-bearing requests are
+        deliberately left to the model and the existing schema/grounding gates.
         """
         text = message.strip()
         lower = " ".join(text.lower().split())
@@ -77,47 +77,43 @@ class OrderSupportAgent:
         if has_order_id or has_sku:
             return None
 
-        capability_markers = (
-            "your capabilities",
-            "what can you do",
-            "what can you help",
-            "how can you assist",
-            "ways you can assist",
-            "what do you do",
-            "supported tasks",
-            "support functions",
-            "available actions",
-            "what services do you provide",
-            "what can i ask you",
-            "how does this assistant help",
-            "how should i use this assistant",
-            "what help is available",
-            "this assistant can handle",
-            "what are you able to do",
+        capability_patterns = (
+            r"\b(?:what|which|list|describe|explain|summarize|give)\b.*\b(?:capabilit\w*|tasks?|functions?|services?|support|actions?|operations?|roles?|requests?|jobs?|help)\b",
+            r"\b(?:assistant|bot|you|your)\b.*\b(?:designed|handle|perform|provide|offer|support|assist|able to do|do)\b",
+            r"\b(?:within scope|in scope|supported functions?|supported tasks?)\b",
         )
-        if any(marker in lower for marker in capability_markers):
+        if any(re.search(pattern, lower) for pattern in capability_patterns):
             return Decision(
                 "answer",
                 "I can look up an order when you provide an order ID and check inventory when you provide a SKU.",
             )
 
-        order_action_markers = (
-            "check order",
-            "check my order",
-            "look up order",
-            "look up my order",
-            "lookup order",
-            "find order",
-            "find my order",
-            "show me the order",
-            "order details",
-            "order information",
-            "order status",
-            "status of my order",
-            "help with an order",
-            "check an order",
+        order_target = "order" in lower
+        order_actions = (
+            "check",
+            "look up",
+            "lookup",
+            "find",
+            "show",
+            "retrieve",
+            "pull up",
+            "locate",
+            "open",
+            "get",
+            "details",
+            "information",
+            "record",
+            "status",
+            "latest",
+            "current",
         )
-        if any(marker in lower for marker in order_action_markers):
+        if order_target and (
+            "my order" in lower
+            or "an order" in lower
+            or "the order" in lower
+            or "purchase order" in lower
+            or any(marker in lower for marker in order_actions)
+        ):
             return Decision("clarify", "Please provide the order ID.")
 
         inventory_terms = ("inventory", "stock", "in stock", "availability")
@@ -128,10 +124,12 @@ class OrderSupportAgent:
             "show",
             "find",
             "how much",
+            "how many",
             "level",
             "available",
             "availability",
             "is this",
+            "is the",
             "whether",
         )
         if any(term in lower for term in inventory_terms) and any(
