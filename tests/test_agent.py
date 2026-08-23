@@ -16,6 +16,21 @@ class InventingModel:
         return Decision("tool_call", tool="process_refund", arguments={"order_id": "12345"})
 
 
+class MissingIdentifierToolModel:
+    def decide(self, message):
+        return Decision("tool_call", tool="check_inventory", arguments={"sku": "GLM-999"})
+
+
+class ClarifyingModel:
+    def decide(self, message):
+        return Decision("clarify", "Please provide more information.")
+
+
+class ValidInventoryModel:
+    def decide(self, message):
+        return Decision("tool_call", tool="check_inventory", arguments={"sku": "GLM-001"})
+
+
 class AgentTests(unittest.TestCase):
     def setUp(self):
         self.store = DemoOrderStore()
@@ -73,6 +88,32 @@ class AgentTests(unittest.TestCase):
     def test_unknown_tool_status_is_normalized(self):
         result = OrderSupportAgent(InventingModel()).handle("Process order 12345")
         self.assertEqual(result.status, "reject")
+
+    def test_missing_inventory_identifier_is_clarified_before_model_tool_call(self):
+        agent = OrderSupportAgent(MissingIdentifierToolModel())
+        result = agent.handle("Please check whether this product is in stock")
+        self.assertEqual(result.status, "clarify")
+        event = agent.audit_log[-1]
+        self.assertEqual(event["decision"], "clarify")
+        self.assertIsNone(event["tool"])
+        self.assertEqual(event["arguments"], {})
+
+    def test_capability_question_is_answered_before_model_overclarifies(self):
+        agent = OrderSupportAgent(ClarifyingModel())
+        result = agent.handle("Explain the ways you can assist shoppers")
+        self.assertEqual(result.status, "answer")
+        event = agent.audit_log[-1]
+        self.assertEqual(event["decision"], "answer")
+        self.assertIsNone(event["tool"])
+
+    def test_valid_inventory_identifier_still_reaches_model_and_executes(self):
+        agent = OrderSupportAgent(ValidInventoryModel())
+        result = agent.handle("Check inventory for GLM-001")
+        self.assertEqual(result.status, "executed")
+        event = agent.audit_log[-1]
+        self.assertEqual(event["decision"], "tool_call")
+        self.assertEqual(event["tool"], "check_inventory")
+        self.assertEqual(event["arguments"], {"sku": "GLM-001"})
 
 
 if __name__ == "__main__":
