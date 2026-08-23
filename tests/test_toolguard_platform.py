@@ -75,15 +75,14 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
     def test_health_and_dashboard(self):
         health = self.client.get("/health")
         self.assertEqual(health.status_code, 200)
-        self.assertEqual(health.json()["version"], "0.4.0")
+        self.assertEqual(health.json()["version"], "1.0.0")
         self.assertTrue(health.json()["api_auth_configured"])
 
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn("ToolGuard", dashboard.text)
+        self.assertIn("ToolGuard v1.0", dashboard.text)
+        self.assertIn("Run 100-case benchmark", dashboard.text)
         self.assertIn("Recent traces", dashboard.text)
-        self.assertIn("average_latency_ms", dashboard.text)
-        self.assertIn("tool_error_rate", dashboard.text)
         self.assertIn("X-API-Key", dashboard.text)
 
     def test_api_rejects_missing_and_wrong_key(self):
@@ -106,15 +105,40 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn("not configured", response.json()["detail"])
 
-    def test_default_benchmark_registry_exposes_locked_order_agent_suite(self):
-        response = self.client.get(
+    def test_default_benchmark_registry_exposes_locked_suites(self):
+        legacy = self.client.get(
             "/api/benchmarks/order-agent-replay",
             headers=AUTH_HEADERS,
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(legacy.status_code, 200)
+        self.assertEqual(legacy.json()["size"], 12)
+
+        v1 = self.client.get(
+            "/api/benchmarks/agent-reliability-v1",
+            headers=AUTH_HEADERS,
+        )
+        self.assertEqual(v1.status_code, 200)
+        payload = v1.json()
+        self.assertEqual(payload["size"], 100)
+        self.assertEqual(len(payload["cases"]), 100)
+        self.assertEqual(
+            payload["sha256"],
+            "d005de66762008999db1a37469231fc5ae0554dad16f0336827265db35dafaa9",
+        )
+
+    def test_locked_100_case_benchmark_runs_through_api(self):
+        response = self.client.post(
+            "/api/benchmarks/agent-reliability-v1/run",
+            headers=AUTH_HEADERS,
+            json={"provider": "qwen-contract-replay"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
-        self.assertEqual(payload["size"], 12)
-        self.assertEqual(len(payload["cases"]), 12)
+        self.assertEqual(payload["passed_cases"], 100)
+        self.assertEqual(payload["failed_cases"], 0)
+        self.assertEqual(payload["unexpected_tool_calls"], 0)
+        self.assertEqual(payload["release_gate"]["decision"], "PASS")
+        self.assertEqual(payload["categories"]["prompt_injection"]["passed"], 15)
 
     def test_custom_benchmark_can_be_registered(self):
         response = self.client.post(
@@ -142,12 +166,14 @@ class ToolGuardPlatformApiTests(unittest.TestCase):
         self.assertEqual(fetched.status_code, 200)
         self.assertEqual(fetched.json()["cases"][0]["case_id"], "smoke-01")
 
-    def test_provider_registry_exposes_real_agent_replay_adapter(self):
+    def test_provider_registry_exposes_replay_and_qwen_adapters(self):
         response = self.client.get("/api/providers", headers=AUTH_HEADERS)
         self.assertEqual(response.status_code, 200)
         providers = response.json()["items"]
         self.assertIn("replay-identity", providers)
         self.assertIn("order-agent-replay", providers)
+        self.assertIn("qwen-contract-replay", providers)
+        self.assertIn("qwen-transformers", providers)
 
     def test_capture_and_analytics(self):
         self.capture(good_trace("trace-good"))
