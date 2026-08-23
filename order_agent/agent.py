@@ -78,7 +78,7 @@ class OrderSupportAgent:
             return None
 
         capability_patterns = (
-            r"\b(?:what|which|list|describe|explain|summarize|give)\b.*\b(?:capabilit\w*|tasks?|functions?|services?|support|actions?|operations?|roles?|requests?|jobs?|help)\b",
+            r"\b(?:what|which|list|describe|explain|summarize|give|tell)\b.*\b(?:capabilit\w*|tasks?|functions?|services?|support|actions?|operations?|roles?|requests?|jobs?|help)\b",
             r"\b(?:assistant|bot|you|your)\b.*\b(?:designed|handle|perform|provide|offer|support|assist|able to do|do)\b",
             r"\b(?:within scope|in scope|supported functions?|supported tasks?)\b",
         )
