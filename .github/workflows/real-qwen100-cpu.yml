@@ -3,6 +3,11 @@ name: Real Qwen100 CPU Benchmark
 on:
   push:
     branches: [benchmark/qwen-v1-real-cpu]
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/run_real_qwen_benchmark.py"
+      - ".github/workflows/real-qwen100-cpu.yml"
   workflow_dispatch:
 
 permissions:
