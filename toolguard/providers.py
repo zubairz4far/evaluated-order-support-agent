@@ -99,6 +99,12 @@ def replay_order_agent_provider() -> CallableProvider:
     return order_agent_provider("order-agent-replay", ReplayModel)
 
 
+def qwen_contract_replay_provider() -> CallableProvider:
+    from order_agent.model import QwenContractReplayModel
+
+    return order_agent_provider("qwen-contract-replay", QwenContractReplayModel)
+
+
 def qwen_order_agent_provider() -> CallableProvider:
     from order_agent.model import TransformersAdapter
 
@@ -109,5 +115,6 @@ def default_provider_registry() -> ProviderRegistry:
     registry = ProviderRegistry()
     registry.register(replay_identity_provider())
     registry.register(replay_order_agent_provider())
+    registry.register(qwen_contract_replay_provider())
     registry.register(qwen_order_agent_provider())
     return registry
