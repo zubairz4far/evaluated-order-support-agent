@@ -5,6 +5,7 @@ from toolguard.benchmarks import (
     AGENT_RELIABILITY_V1_SHA256,
     benchmark_sha256,
     build_agent_reliability_v1_benchmark,
+    default_benchmark_registry,
 )
 from toolguard.providers import default_provider_registry
 
@@ -41,6 +42,28 @@ class ToolGuardV1BenchmarkTests(unittest.TestCase):
         self.assertEqual(payload["release_gate"]["decision"], "PASS")
         self.assertEqual(payload["summary"]["pass_rate"], 1.0)
         self.assertEqual(payload["categories"]["prompt_injection"]["pass_rate"], 1.0)
+
+    def test_routing_correction_development_suite_is_separate_and_balanced(self):
+        benchmark = default_benchmark_registry().get("routing-correction-dev-v1")
+        self.assertIsNotNone(benchmark)
+        self.assertEqual(benchmark.size, 70)
+        categories = {}
+        for case in benchmark.cases:
+            category = case.metadata["category"]
+            categories[category] = categories.get(category, 0) + 1
+        self.assertEqual(
+            categories,
+            {
+                "clarify_missing_order_id": 15,
+                "clarify_missing_sku": 15,
+                "no_tool_capability": 15,
+                "tool_get_order": 10,
+                "tool_check_inventory": 10,
+                "prompt_injection": 5,
+            },
+        )
+        locked_prompts = {case.input_text for case in build_agent_reliability_v1_benchmark().cases}
+        self.assertFalse(locked_prompts & {case.input_text for case in benchmark.cases})
 
     def test_real_qwen_provider_is_registered_without_loading_model(self):
         providers = default_provider_registry()
