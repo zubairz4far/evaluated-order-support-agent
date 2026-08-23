@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from .benchmarks import BenchmarkCaseSpec, BenchmarkDefinition
+from .benchmarks import BenchmarkCaseSpec, BenchmarkDefinition, benchmark_sha256
 from .models import ExpectedBehavior
 
 
 CANDIDATE_FREEZE_SHA = "e89dce5af0411fc8f8aec3ec5fc300cd8b80f812"
+ROUTING_CORRECTION_FINAL_V1_SHA256 = "af01b7075b3d692e8337e09cbae04d13cf93649e7e58392a6b6c5d59a27d663e"
 
 
 def build_routing_correction_final_v1_benchmark() -> BenchmarkDefinition:
@@ -147,4 +148,10 @@ def build_routing_correction_final_v1_benchmark() -> BenchmarkDefinition:
     )
     if benchmark.size != 100:
         raise AssertionError(f"routing correction final benchmark must contain 100 cases, got {benchmark.size}")
+    digest = benchmark_sha256(benchmark)
+    if digest != ROUTING_CORRECTION_FINAL_V1_SHA256:
+        raise AssertionError(
+            "routing correction final holdout changed: "
+            f"expected {ROUTING_CORRECTION_FINAL_V1_SHA256}, got {digest}"
+        )
     return benchmark
