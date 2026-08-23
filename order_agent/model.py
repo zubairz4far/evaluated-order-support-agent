@@ -14,7 +14,7 @@ class ModelAdapter(Protocol):
 
 
 class ReplayModel:
-    """Deterministic offline stand-in for the fine-tuned model."""
+    """Deterministic offline stand-in for the original guarded agent catalog."""
 
     def decide(self, message: str) -> Decision:
         text = message.strip()
@@ -59,6 +59,26 @@ class ReplayModel:
         return None
 
 
+class QwenContractReplayModel(ReplayModel):
+    """Deterministic CI provider that mirrors the published Qwen tool schema.
+
+    The historical ReplayModel uses `get_inventory`; the published Qwen adapter
+    uses `check_inventory`. Keeping this adapter separate preserves the original
+    12-case benchmark while giving the 100-case v1 suite an exact offline
+    contract twin for CI and release-gate reproduction.
+    """
+
+    def decide(self, message: str) -> Decision:
+        decision = super().decide(message)
+        if decision.kind == "tool_call" and decision.tool == "get_inventory":
+            return Decision(
+                "tool_call",
+                tool="check_inventory",
+                arguments=dict(decision.arguments or {}),
+            )
+        return decision
+
+
 TOOL_SCHEMAS = [
     {
         "type": "function",
@@ -92,7 +112,7 @@ class TransformersAdapter:
     """Lazy adapter for the published Qwen3 PEFT model.
 
     Heavy ML dependencies are imported only when this adapter is instantiated,
-    keeping the deterministic demo and test suite lightweight.
+    keeping deterministic CI and API startup lightweight.
     """
 
     adapter_id: str = "zubairz4far/qwen3-1.7b-tool-calling"
