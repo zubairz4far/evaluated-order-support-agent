@@ -20,6 +20,7 @@ from .models import ExpectedBehavior
 from .observability import ObservabilityPipeline
 from .policies import ReleasePolicy, check_release
 from .providers import ProviderRegistry, default_provider_registry
+from .security import ApiKeyMiddleware
 from .serialization import trace_from_dict, trace_to_dict
 from .store import InMemoryTraceStore, TraceStore
 
@@ -98,6 +99,7 @@ DASHBOARD_HTML = """<!doctype html>
 <main>
   <h1>ToolGuard</h1>
   <p class="muted">Agent reliability, observability, replay and release gates.</p>
+  <p class="muted">API data is protected. The dashboard asks for the shared API key and keeps it only in session storage.</p>
   <div class="grid" id="metrics"></div>
   <div class="section card">
     <h2>Recent traces</h2>
@@ -111,10 +113,21 @@ DASHBOARD_HTML = """<!doctype html>
 <script>
 const fmt = v => v === null || v === undefined ? '—' : v;
 async function load() {
+  let apiKey = sessionStorage.getItem('toolguard_api_key');
+  if (!apiKey) {
+    apiKey = window.prompt('ToolGuard API key');
+    if (apiKey) sessionStorage.setItem('toolguard_api_key', apiKey);
+  }
+  const headers = apiKey ? {'X-API-Key': apiKey} : {};
+  const api = async path => {
+    const response = await fetch(path, {headers});
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    return response.json();
+  };
   const [analytics, traces, benchmarks] = await Promise.all([
-    fetch('/api/analytics').then(r => r.json()),
-    fetch('/api/traces?limit=20').then(r => r.json()),
-    fetch('/api/benchmarks').then(r => r.json())
+    api('/api/analytics'),
+    api('/api/traces?limit=20'),
+    api('/api/benchmarks')
   ]);
   const metrics = [
     ['Traces', analytics.traces],
@@ -140,6 +153,7 @@ def create_app(
     providers: ProviderRegistry | None = None,
     benchmarks: BenchmarkRegistry | None = None,
     release_policy: ReleasePolicy | None = None,
+    api_key: str | None = None,
 ):
     trace_store = store or InMemoryTraceStore()
     pipeline = ObservabilityPipeline(trace_store)
@@ -149,18 +163,25 @@ def create_app(
 
     app = FastAPI(
         title="ToolGuard API",
-        version="0.3.0",
+        version="0.4.0",
         description="Agent reliability, observability, replay and release-gate service.",
     )
+    app.add_middleware(ApiKeyMiddleware, api_key=api_key)
     app.state.store = trace_store
     app.state.pipeline = pipeline
     app.state.providers = provider_registry
     app.state.benchmarks = benchmark_registry
     app.state.release_policy = default_policy
+    app.state.api_key_configured = bool(api_key)
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok", "service": "toolguard", "version": "0.3.0"}
+    def health() -> dict[str, str | bool]:
+        return {
+            "status": "ok",
+            "service": "toolguard",
+            "version": "0.4.0",
+            "api_auth_configured": bool(api_key),
+        }
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/dashboard", response_class=HTMLResponse)
@@ -322,7 +343,11 @@ def app_from_environment():
         max_pass_rate_drop=float(os.getenv("TOOLGUARD_MAX_PASS_RATE_DROP", "0.0")),
         max_metric_drop=float(os.getenv("TOOLGUARD_MAX_METRIC_DROP", "0.0")),
     )
-    return create_app(store=store, release_policy=policy)
+    return create_app(
+        store=store,
+        release_policy=policy,
+        api_key=os.getenv("TOOLGUARD_API_KEY"),
+    )
 
 
 app = app_from_environment()
