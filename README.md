@@ -186,3 +186,7 @@ A benchmark is useful only if it can reject a candidate. ToolGuard v1.0 demonstr
 ToolGuard does not claim a finished multi-tenant SaaS. Remaining work includes worker/queue execution for expensive model runs, versioned DB migrations, persistent benchmark/release history, distributed idempotency, sustained load testing, and enterprise identity/RBAC.
 
 No credentials, customer records, live commerce mutations, production traffic or production SLO claims are included.
+
+## Author & related work
+
+Maintained by **Zubair Zafar**, an AI/ML engineer and co-founder of [Pixelense](https://pixelense.com/), a human-led AI product photography and ecommerce visual-production studio.
