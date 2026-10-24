@@ -79,4 +79,12 @@ class OrderSupportAgent:
                 return key
             if not re.search(rf"(?<![A-Za-z0-9]){re.escape(value)}(?![A-Za-z0-9])", message, re.IGNORECASE):
                 return key
+        # Monetary side effects must not rely on an amount invented by a model.
+        # A legitimate amount must be explicitly stated in the user request.
+        if "amount" in arguments:
+            amount = arguments["amount"]
+            if type(amount) is not int or not re.search(
+                rf"(?<![A-Za-z0-9]){amount}(?![A-Za-z0-9])", message
+            ):
+                return "amount"
         return None
