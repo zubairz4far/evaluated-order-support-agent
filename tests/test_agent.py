@@ -77,3 +77,39 @@ class AgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RefundSafetyTests(unittest.TestCase):
+    def test_boolean_or_nonpositive_refund_amount_is_rejected(self):
+        from order_agent.tools import ToolValidationError
+
+        agent = OrderSupportAgent(ReplayModel())
+        refund = agent.registry["create_refund"]
+        for amount in (True, False, 0, -50):
+            with self.subTest(amount=amount):
+                with self.assertRaises(ToolValidationError):
+                    refund.validate({"order_id": "67890", "amount": amount})
+
+    def test_refund_amount_must_be_grounded_even_if_confirmed(self):
+        class InventingAmountModel:
+            def decide(self, message):
+                return Decision(
+                    "tool_call",
+                    tool="create_refund",
+                    arguments={"order_id": "67890", "amount": 900},
+                )
+
+        agent = OrderSupportAgent(InventingAmountModel())
+        for confirmed in (False, True):
+            result = agent.handle("Refund order 67890", confirmed=confirmed)
+            self.assertEqual(result.status, "clarify")
+            self.assertIn("amount", result.message)
+            self.assertIsNone(result.data)
+
+    def test_explicit_refund_amount_still_requires_confirmation(self):
+        agent = OrderSupportAgent(ReplayModel())
+        result = agent.handle("Refund order 12345 PKR 500")
+        self.assertEqual(result.status, "confirmation_required")
+        confirmed_result = agent.handle("Refund order 12345 PKR 500", confirmed=True)
+        self.assertEqual(confirmed_result.status, "executed")
+        self.assertEqual(confirmed_result.data["amount"], 500)
