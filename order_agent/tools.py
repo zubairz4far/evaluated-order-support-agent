@@ -26,10 +26,17 @@ class ToolSpec:
             raise ToolValidationError(f"missing arguments: {sorted(missing)}")
         for key, value in arguments.items():
             expected = self.required.get(key, self.optional.get(key))
-            if expected and not isinstance(value, expected):
+            # isinstance(True, int) is True in Python: tool arguments need
+            # strict types so a boolean cannot become a monetary amount.
+            if expected and (
+                not isinstance(value, expected)
+                or (expected is int and type(value) is not int)
+            ):
                 raise ToolValidationError(f"{key} must be {expected.__name__}")
             if isinstance(value, str) and (not value.strip() or len(value) > 100):
                 raise ToolValidationError(f"invalid {key}")
+            if key == "amount" and type(value) is int and value <= 0:
+                raise ToolValidationError("amount must be positive")
 
 
 class DemoOrderStore:
